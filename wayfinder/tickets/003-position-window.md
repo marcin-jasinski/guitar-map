@@ -34,3 +34,10 @@ stretch. Width is part of view state and is saved with favorites (TICKET-006).
   clicked fret stays inside the window but may not be dead-center).
 - Neck length (last fret) is still open — see the whole-neck fret-count fog item; the window
   logic just consumes `lastFret` as its upper clamp and is unaffected by which value wins.
+
+## Spec-review refinement (2026-07-19)
+
+- **Whole-neck fret count resolved: 24** (render frets 0–24, two octaves, matching a 24-fret
+  electric). So `lastFret = 24` and the window's highest position is `20 .. 24`. This closes
+  the one item the original resolution left open; the board's horizontal scroll (TICKET-007)
+  absorbs the width.

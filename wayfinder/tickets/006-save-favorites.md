@@ -55,3 +55,21 @@ type Store = {
 
 `labelMode`'s exact values are fixed by the fretboard prototype (TICKET-007); the field
 exists here as part of the snapshot.
+
+## Spec-review refinement (2026-07-19)
+
+This schema predated TICKET-008 (diatonic triads) and TICKET-009 (overlay) and couldn't hold
+their state; the `view` field also contradicted TICKET-007's "no separate position mode".
+Revised schema (the version in `guitar-map/spec.md` §8 is authoritative):
+
+- **Dropped `view`** — TICKET-007 killed the separate position mode, so whole-neck render +
+  `window` is the entire position state.
+- **`root` + `selection` → a `content` discriminated union** on `kind`, so illegal states are
+  unrepresentable:
+  - `scale` carries `scale` + `degree: number | null` — the selected diatonic-triad degree
+    (TICKET-008), so a highlighted triad restores.
+  - `chord` carries `slots: ChordSlot[]` (length 1–3) — overlay when ≥2 (TICKET-009).
+  - `arpeggio` carries one `chord`.
+- **`labelMode`** pinned to `"names" | "degrees" | "intervals"`; forced `"names"` while ≥2
+  chord slots are active (TICKET-009).
+- **`version` stays 1** — nothing is shipped yet, so no migration is owed.

@@ -18,7 +18,8 @@ TICKET-006)?
 ## Resolution
 
 **Note input: per-string note dropdown + octave selector.** Each string is a row with a
-note-letter dropdown (C, C♯, … B) and an octave selector, so a string's pitch is fully
+note-letter dropdown (C, C♯/D♭, D, D♯/E♭, … B — both spellings on the black keys, see the
+spec-review refinement) and an octave selector, so a string's pitch is fully
 specified as note + octave with no free-text parsing. This is unambiguous, mobile-friendly,
 and supports wide/drop tunings (unlike note-only). Steppers were rejected as tedious for
 from-scratch entry; typing was rejected for the parsing/enharmonic ambiguity it invites.
@@ -39,3 +40,14 @@ field defaulting to an auto-label built from its pitches (e.g. "E A D G C F"). P
 handled by TICKET-006 — a saved custom tuning is one of the things the favorites/localStorage
 schema must hold (tuning = ordered list of {note, octave} + optional name). Unnamed/unsaved
 custom tunings remain fully usable within the session.
+
+## Spec-review refinement (2026-07-19)
+
+- **Note dropdown offers both spellings on the black keys** (C, C♯/D♭, D, D♯/E♭, … B), not
+  the prototype's sharps-only array, so a flat-tuned string reads as "E♭" and auto-labels
+  match how players write tunings. The stored `note` keeps whichever spelling was picked.
+- **Octave selector spans 0–8** (scientific pitch notation), covering B0 on a 5-string bass
+  through the top frets.
+- **Built-in presets (6-string-oriented, ~8):** Standard `E A D G B E`, Drop D, Half-step
+  down, DADGAD, Open G, Open D, All-fourths `E A D G C F`, 7-string standard. Each is a
+  `Tuning` object; Standard is the first-load default. Trivially extended later.

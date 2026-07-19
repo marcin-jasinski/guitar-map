@@ -36,7 +36,7 @@ assembled from the nine ticket resolutions below.
   spelling.
 - [Define position window size and navigation](tickets/003-position-window.md) — configurable
   4–6 fret span (default 5), click-a-fret-to-center + arrow nudges, fret 0 as an open-string
-  column, window clamped to [0, lastFret].
+  column, window clamped to [0, lastFret]; whole-neck fret count resolved to 24 (spec review).
 - [Design custom tuning builder UX](tickets/004-custom-tuning-builder.md) — per-string note +
   octave dropdowns, variable 4–8 strings, soft non-blocking warnings, optional name persisted
   via favorites; renderer reads string count from the tuning (not hard-coded 6).
@@ -69,8 +69,6 @@ assembled from the nine ticket resolutions below.
 - A diatonic-triad → multi-chord-overlay bridge ("send this triad to the overlay") — now that
   TICKET-009's overlay model is fixed (independent slots), this is just a "pre-fill a slot"
   action from TICKET-008's degree selector; deferred as a post-launch convenience.
-- How many frets are shown in whole-neck view (12 vs full fretboard length) — orientation and
-  window behaviour are now settled (TICKET-007); only the whole-neck fret count remains open.
 - Realistic sample-based audio as a post-launch upgrade over the launch Web Audio synthesis
   (TICKET-005) — needs sample assets + licensing + pitch-shifting.
 - Whether chord/scale results can be exported or shared (link, image, PDF) — not asked

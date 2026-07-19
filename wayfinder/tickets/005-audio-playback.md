@@ -35,3 +35,9 @@ tuning's open-string pitch plus fret offset (`pitch = openStringPitch(tuning, st
 fretSemitones`), so alternate and custom tunings sound correct. This falls straight out of
 the algorithmic data model — the same {note, octave} pitch data the tuning builder
 (TICKET-004) captures feeds the synth's frequency calc.
+
+## Spec-review refinement (2026-07-19)
+
+- **Pitch reference pinned:** A4 = 440 Hz, scientific pitch notation (middle C = C4, standard
+  low E = E2). Frequency = `440 * 2^((midi − 69) / 12)`, with the MIDI number computed from
+  `{note, octave}`. This makes the frequency calc above concrete.

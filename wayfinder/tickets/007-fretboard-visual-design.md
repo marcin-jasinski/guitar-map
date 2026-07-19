@@ -39,6 +39,14 @@ scaffold, since the decision is look-and-feel, not stack) and reacted to it live
   non-chord scale tones fade back; the **arpeggio is a directional, arrowed connecting path**
   rather than badges. Shape-only and color-per-role encodings (A/B) were set aside.
 
+## Spec-review refinement (2026-07-19)
+
+- **The arrowed arpeggio path is dropped.** On a dense whole-neck view there was no
+  non-spaghetti way to define which occurrences the arrows connect. An arpeggio therefore
+  renders *identically* to a single chord (interval color + outline); Scale/Chord/Arpeggio are
+  distinguished by the content-type selector and by playback (TICKET-005), not by a distinct
+  arpeggio glyph. Everything else in variant C's scheme stands.
+
 **Implications for downstream tickets:**
 
 - Single-position vs whole-neck is settled as *whole-neck with an in-place highlighted window* —

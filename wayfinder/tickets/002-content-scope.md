@@ -47,9 +47,10 @@ Modes of harmonic/melodic minor are deferred to fog.
 - Shell voicings (drop the 5th): maj7 shell `0 4 11`, dom7 shell `0 4 10`, min7 shell `0 3 10`
 
 **Arpeggios:** their own selectable content category (alongside Scale / Chord), reusing the
-chord formulas above but rendered as a single-note spread across the neck rather than a
-stacked shape. No new formulas — a chord and its arpeggio share note sets; they differ only
-in presentation.
+chord formulas above. No new formulas — a chord and its arpeggio share note sets; they differ
+only in presentation. (Spec-review refinement, 2026-07-19: the arpeggio renders *identically*
+to a single chord — the earlier "arrowed connecting path" was dropped — so the difference is
+sequential playback (TICKET-005) and no-overlay, not a distinct visual.)
 
 **Roots:** all 12 chromatic roots, chosen by transpose (no per-key authoring). **Enharmonic
 spelling is key-correct**, not just pitch-class: note names follow the key/scale context so
@@ -58,3 +59,21 @@ E♯, not F; the "G♭ vs F♯" choice follows the selected root's spelling). Th
 spelling engine in the data model — spell each degree by letter first, then apply
 sharps/flats — rather than a flat pitch-class → name lookup. Well-understood algorithm; no
 separate ticket, but flagged here as a data-model requirement.
+
+## Spec-review refinement (2026-07-19)
+
+The spec review found the "one letter per degree" rule underspecified for the three
+non-diatonic scales and for chords viewed without a key. Resolved:
+
+- **Root picker = 17 spelled roots**: 7 naturals + both spellings of each black key
+  (C♯/D♭, D♯/E♭, F♯/G♭, G♯/A♭, A♯/B♭). The picked spelling drives the engine, so F♯-major
+  and G♭-major are distinct selections. B♯/E♯/C♭/F♭ (enharmonics of white keys) are not offered.
+- **Pentatonics** inherit letters from their parent seven-note scale (minor pent ⊂ natural
+  minor, major pent ⊂ major).
+- **Blues** = minor pentatonic + the ♭5, which reuses an already-present letter (C blues =
+  C E♭ F G♭ G B♭, letter G twice) — the one deliberate exception to one-letter-per-degree.
+- **Chords in isolation**: spell each tone by its chord-degree letter off the root (3rd =
+  letter+2, 5th = letter+4, 7th = letter+6), accidental from the semitone. Same engine keyed
+  on chord intervals: Caug = C E G♯, Cdim = C E♭ G♭.
+- **Double accidentals render faithfully** (Cdim7's 7th = B𝄫; A♯ major's 3rd = C𝄪); no
+  respelling pass — it is the raw letter-arithmetic output.
