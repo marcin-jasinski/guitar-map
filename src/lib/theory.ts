@@ -162,6 +162,15 @@ export type Tuning = { name?: string; strings: Pitch[] };
 
 /** Scientific pitch notation: middle C = C4 = MIDI 60, standard low E = E2 = 40. */
 export const midiOf = (p: Pitch) => (p.octave + 1) * 12 + notePc(p.note);
+
+/** How players write tunings: sharps for C♯/F♯, flats for E♭/A♭/B♭. */
+const TUNING_SPELLING = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
+
+/** The inverse of `midiOf`, for naming a string the builder invents. */
+export const pitchFromMidi = (midi: number): Pitch => ({
+  note: TUNING_SPELLING[mod(midi, 12)],
+  octave: Math.max(0, Math.floor(midi / 12) - 1),
+});
 export const freq = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 /** `string` is an index into `tuning.strings`, ordered low→high. */
 export const fretMidi = (tuning: Tuning, string: number, fret: number) =>

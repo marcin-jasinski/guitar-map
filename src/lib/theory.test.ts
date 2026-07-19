@@ -9,6 +9,7 @@ import {
   fretMidi,
   midiOf,
   notePc,
+  pitchFromMidi,
   scaleNotes,
   spell,
 } from './theory';
@@ -136,6 +137,19 @@ describe('pitch, tuning and audio frequency (§6)', () => {
   test('A4 = 440 Hz', () => {
     expect(freq(69)).toBeCloseTo(440);
     expect(freq(57)).toBeCloseTo(220);
+  });
+
+  test('pitchFromMidi inverts midiOf, spelled the way tunings are written', () => {
+    expect(pitchFromMidi(40)).toEqual({ note: 'E', octave: 2 });
+    expect(pitchFromMidi(60)).toEqual({ note: 'C', octave: 4 });
+    // A fourth below low E is B1, and a fourth below that is F♯1 — 7- and 8-string.
+    expect(pitchFromMidi(35)).toEqual({ note: 'B', octave: 1 });
+    expect(pitchFromMidi(30)).toEqual({ note: 'F♯', octave: 1 });
+    // Lowered strings read as flats, so they match how players write them.
+    expect(pitchFromMidi(39)).toEqual({ note: 'E♭', octave: 2 });
+    for (const midi of [28, 33, 45, 59, 64, 88]) {
+      expect(midiOf(pitchFromMidi(midi))).toBe(midi);
+    }
   });
 
   test('fret pitch follows the tuning, not a hard-coded EADGBE', () => {
