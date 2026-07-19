@@ -1,0 +1,100 @@
+:root {
+  --bg: #edeae3;
+  --panel: #ffffff;
+  --ink: #26221c;
+  --muted: #736c60;
+  --hair: #d8d3c8;
+  --accent: #c08a2d;
+  --accent-ink: #ffffff;
+  --warn: #b3541e;
+
+  /* Interval roles (§3) — constant across themes, they sit on wood. */
+  --c-root: #e5484d;
+  --c-triad: #30a46c;
+  --c-fifth: #4c8dff;
+  --c-seventh: #a86ddf;
+  --c-ext: #0f7d8c;
+  --c-scale: #a8916a;
+
+  /* Overlay chord identity (§9): blue / orange / purple stay distinguishable
+     under deuteranopia and protanopia, and every dot also carries a 1·2·3 badge
+     so identity is never colour-only. */
+  --c-ch1: #3a7bd5;
+  --c-ch2: #e07b16;
+  --c-ch3: #8b46c9;
+
+  /* The neck is a physical object: fixed in both themes. */
+  --wood-1: #3a2417;
+  --wood-2: #4a2f1d;
+  --wire: #b9b4a7;
+  --string: #d8d2c4;
+  --inlay: #ece6da;
+
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16130f;
+    --panel: #1e1a15;
+    --ink: #ece7dd;
+    --muted: #9a9184;
+    --hair: #322c24;
+    --warn: #f0954a;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h3 {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 16px 0 0;
+}
+aside > h3:first-child { margin-top: 0; }
+
+button,
+select,
+input {
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 5px 9px;
+}
+button { cursor: pointer; background: transparent; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+details { margin-top: 8px; }
+summary { font-size: 0.78rem; color: var(--muted); cursor: pointer; }
+select { width: 100%; margin-top: 6px; }
+
+/* Shared sidebar control shapes, used by App, TuningPicker and Favorites. */
+.row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+.row select { flex: 1; min-width: 0; }
+.x { padding: 4px 8px; }
+.muted { color: var(--muted); font-size: 0.76rem; margin: 8px 0 0; }
+.warn { color: var(--warn); font-size: 0.76rem; margin: 8px 0 0; line-height: 1.35; }
