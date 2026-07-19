@@ -14,6 +14,9 @@ stack, and the UI/UX for single-position vs whole-neck display, diatonic-triad h
 on scales, and up-to-3-chord overlay comparison. Reaching the end means there is nothing
 left to decide before implementation starts — this map does not build the website itself.
 
+**Destination reached:** consolidated build-ready spec at [`guitar-map/spec.md`](guitar-map/spec.md),
+assembled from the nine ticket resolutions below.
+
 ## Notes
 
 - Domain: guitar music theory (scales, chords, triads, shell chords, arpeggios) and its
