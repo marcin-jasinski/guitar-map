@@ -6,20 +6,26 @@
    * Dumb by design: it draws whatever pitch classes `dots` hands it.
    */
   import { LAST_FRET, fretMidi, type FretWindow, type Tuning } from './theory';
-  import { cellKey, type Dot } from './view';
+  import { cellKey, type Barre, type Dot } from './view';
 
   let {
     tuning,
     dots,
     cells,
+    barre,
+    showWindow,
     win,
     onCenter,
     onPlayNote,
   }: {
     tuning: Tuning;
     dots: Map<number, Dot>;
-    /** Which `(string, fret)` positions get a dot — see `visibleCells`. */
+    /** Which `(string, fret)` positions get a dot — see `board`. */
     cells: Set<string>;
+    /** Set when the shape can be held with one finger across a run of strings. */
+    barre: Barre | null;
+    /** The window is only meaningful in position mode; elsewhere nothing is emphasised. */
+    showWindow: boolean;
     win: FretWindow;
     onCenter: (fret: number) => void;
     onPlayNote: (midi: number) => void;
@@ -50,6 +56,8 @@
   }
 
   const inWindow = (f: number) => f >= win.startFret && f < win.startFret + win.width;
+  const barred = (s: number, f: number) =>
+    !!barre && barre.fret === f && s >= barre.from && s <= barre.to;
 </script>
 
 <div class="scroll">
@@ -67,12 +75,16 @@
       rx="6" fill="url(#wood)"
     />
 
-    <!-- The position window is emphasis on the whole neck, not a separate view (§4). -->
-    <rect
-      x={x(win.startFret) - FRET_W * 0.5} y={PAD_T - 8}
-      width={win.width * FRET_W} height={count * STRING_H + 16}
-      fill="var(--accent)" opacity=".14" stroke="var(--accent)" stroke-width="2" rx="4"
-    />
+    <!-- The position window is emphasis on the whole neck, not a separate view (§4).
+         Outside position mode every drawn note is equally in play, so there is
+         nothing to emphasise and the band would only mislead. -->
+    {#if showWindow}
+      <rect
+        x={x(win.startFret) - FRET_W * 0.5} y={PAD_T - 8}
+        width={win.width * FRET_W} height={count * STRING_H + 16}
+        fill="var(--accent)" opacity=".14" stroke="var(--accent)" stroke-width="2" rx="4"
+      />
+    {/if}
 
     {#each INLAYS as f}
       <circle cx={x(f)} cy={PAD_T + (count * STRING_H) / 2} r="5" fill="var(--inlay)" opacity=".4" />
@@ -106,9 +118,17 @@
           x={x(f) - FRET_W / 2} y={PAD_T - 8} width={FRET_W} height={count * STRING_H + 16}
           fill="transparent" class="fretzone"
         />
-        <text x={x(f)} y={height - 8} class="fretnum" class:on={inWindow(f)} text-anchor="middle">{f}</text>
+        <text x={x(f)} y={height - 8} class="fretnum" class:on={showWindow && inWindow(f)} text-anchor="middle">{f}</text>
       </g>
     {/each}
+
+    {#if barre}
+      <rect
+        x={x(barre.fret) - 13} y={y(barre.to) - 13}
+        width="26" height={y(barre.from) - y(barre.to) + 26}
+        rx="13" fill="var(--ink)" opacity=".22"
+      />
+    {/if}
 
     {#each tuning.strings as _, s}
       {#each { length: LAST_FRET + 1 } as _, f}
@@ -118,8 +138,8 @@
           {@const r = dot.faded ? 10 : 13}
           <g
             role="button" tabindex="0"
-            class="dot" class:faded={dot.faded} class:out={!inWindow(f)}
-            aria-label="{dot.name}, {dot.role}, string {s + 1} fret {f}"
+            class="dot" class:faded={dot.faded}
+            aria-label="{dot.name}, {dot.role}, string {s + 1} fret {f}{barred(s, f) ? ', barred' : ''}"
             onclick={() => onPlayNote(midi)}
             onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPlayNote(midi))}
           >
@@ -154,8 +174,6 @@
   .fretzone:hover { fill: var(--accent); opacity: 0.07; }
   .dot { cursor: pointer; }
   .dot.faded { opacity: 0.5; }
-  .dot.out { opacity: 0.55; }
-  .dot.faded.out { opacity: 0.3; }
   .dot:hover { filter: brightness(1.15); }
   .dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .lbl { fill: #fff; font-size: 11px; font-weight: 700; paint-order: stroke; }

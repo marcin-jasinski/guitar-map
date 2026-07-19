@@ -11,10 +11,26 @@
     SCALES,
     chordSymbol,
     diatonicTriads,
+    fretMidi,
     type Tuning,
   } from './lib/theory';
-  import { describeContent, type Content, type Favorite, type LabelMode } from './lib/store.svelte';
-  import { CHORD_COLORS, chordVoicing, effectiveLabelMode, noteMap, scaleRun, visibleCells } from './lib/view';
+  import {
+    describeContent,
+    type Content,
+    type Display,
+    type Favorite,
+    type LabelMode,
+  } from './lib/store.svelte';
+  import {
+    CHORD_COLORS,
+    board,
+    chordVoicing,
+    contentRoot,
+    effectiveLabelMode,
+    noteMap,
+    rootPitches,
+    scaleRun,
+  } from './lib/view';
 
   let tuning = $state<Tuning>(structuredClone(PRESET_TUNINGS[0]));
   let content = $state<Content>({ kind: 'scale', root: 'C', scale: 'Major (Ionian)', degree: null });
@@ -22,10 +38,18 @@
   let labelMode = $state<LabelMode>('names');
   // Default to the position: the whole neck at once is the reference view, not
   // the working one.
-  let wholeNeck = $state(false);
+  let display = $state<Display>({ mode: 'position', octaves: 1, anchor: 0 });
 
   let dots = $derived(noteMap(content, labelMode));
-  let cells = $derived(visibleCells(tuning, win, content, dots, wholeNeck));
+  let neck = $derived(board(tuning, win, content, dots, display));
+  let anchors = $derived(rootPitches(tuning, content, display.octaves));
+  let anchorMidi = $derived(
+    anchors[Math.max(0, Math.min(anchors.length - 1, display.anchor))] ?? 0,
+  );
+  // Scientific pitch notation, so the readout names an actual pitch: "C3 → C5".
+  let anchorOctave = $derived(Math.floor(anchorMidi / 12) - 1);
+  let rootLabel = $derived(`${contentRoot(content)}${anchorOctave}`);
+  let topLabel = $derived(`${contentRoot(content)}${anchorOctave + display.octaves}`);
   let activeLabel = $derived(effectiveLabelMode(content, labelMode));
   let triads = $derived(content.kind === 'scale' ? diatonicTriads(content.root, content.scale) : []);
   let root = $derived(content.kind === 'chord' ? content.slots[0].root : content.root);
@@ -35,11 +59,27 @@
   // but may not be dead-centre (§4).
   const clamp = (start: number) => Math.max(0, Math.min(LAST_FRET + 1 - win.width, start));
   const center = (fret: number) => (win.startFret = clamp(fret - Math.floor(win.width / 2)));
-  const nudge = (d: number) => (win.startFret = clamp(win.startFret + d));
 
+  /** ◄ ► move the window by a fret, or step to the next root in octave mode. */
+  function nudge(d: number) {
+    if (display.mode === 'octaves') {
+      display.anchor = Math.max(0, Math.min(anchors.length - 1, display.anchor + d));
+    } else {
+      win.startFret = clamp(win.startFret + d);
+    }
+  }
+
+  /** Picking a fret width is also a statement that you want the window back. */
   function setWidth(w: number) {
     win.width = w;
     win.startFret = clamp(win.startFret);
+    display.mode = 'position';
+  }
+
+  function setOctaves(n: number) {
+    display.octaves = n;
+    display.mode = 'octaves';
+    display.anchor = Math.min(display.anchor, rootPitches(tuning, content, n).length - 1);
   }
 
   /** Switching content type carries the root across rather than resetting it. */
@@ -58,8 +98,23 @@
   }
 
   function play() {
-    if (content.kind === 'scale') playSequence(scaleRun(tuning, win, content.root, content.scale));
-    else if (content.kind === 'arpeggio') playSequence(chordVoicing(tuning, win, content.root, content.chord));
+    // In octave mode play exactly what is drawn: the span from the anchor root.
+    const octaves = display.mode === 'octaves' ? display.octaves : 1;
+    if (content.kind === 'scale') {
+      playSequence(scaleRun(content.root, content.scale, startMidi(), octaves));
+    } else if (content.kind === 'arpeggio') {
+      playSequence(chordVoicing(tuning, win, content.root, content.chord));
+    }
+  }
+
+  /** Where a scale run begins: the chosen root in octave mode, else the lowest
+   *  root reachable in the window. */
+  function startMidi(): number {
+    if (display.mode === 'octaves') return anchorMidi;
+    const inWin = anchors.find(
+      (m) => m >= fretMidi(tuning, 0, win.startFret) && m <= fretMidi(tuning, tuning.strings.length - 1, win.startFret + win.width - 1),
+    );
+    return inWin ?? anchors[0] ?? 60;
   }
 
   const snapshot = () => ({
@@ -67,7 +122,7 @@
     content: structuredClone($state.snapshot(content)),
     window: { ...win },
     labelMode,
-    wholeNeck,
+    display: { ...display },
   });
 
   function loadFavorite(f: Favorite) {
@@ -75,7 +130,7 @@
     content = structuredClone($state.snapshot(f.content));
     win = { ...f.window };
     labelMode = f.labelMode;
-    wholeNeck = f.wholeNeck ?? false;
+    display = { ...(f.display ?? { mode: 'position', octaves: 1, anchor: 0 }) };
   }
 
   const LABEL_MODES: LabelMode[] = ['names', 'degrees', 'intervals'];
@@ -176,21 +231,53 @@
       {/if}
     {/if}
 
-    <h3>Position window</h3>
-    <div class="row">
-      <button class="x" aria-label="Move window down a fret" onclick={() => nudge(-1)}>◄</button>
-      <span class="readout">frets {win.startFret}–{win.startFret + win.width - 1}</span>
-      <button class="x" aria-label="Move window up a fret" onclick={() => nudge(1)}>►</button>
-    </div>
-    <div class="seg" role="group" aria-label="Window width">
-      {#each [4, 5, 6] as w}
-        <button aria-pressed={win.width === w} onclick={() => setWidth(w)}>{w} frets</button>
-      {/each}
-    </div>
+    <h3>Show</h3>
     <div class="seg" role="group" aria-label="How much of the neck to show">
-      <button aria-pressed={!wholeNeck} onclick={() => (wholeNeck = false)}>In position</button>
-      <button aria-pressed={wholeNeck} onclick={() => (wholeNeck = true)}>Whole neck</button>
+      <button aria-pressed={display.mode === 'position'} onclick={() => (display.mode = 'position')}>
+        Position
+      </button>
+      <button aria-pressed={display.mode === 'octaves'} onclick={() => (display.mode = 'octaves')}>
+        Octaves
+      </button>
+      <button aria-pressed={display.mode === 'whole'} onclick={() => (display.mode = 'whole')}>
+        Whole neck
+      </button>
     </div>
+
+    <!-- Width and octave count belong to one mode each, so the other one's
+         control is hidden rather than left sitting there meaning nothing. -->
+    {#if display.mode === 'position'}
+      <div class="seg" role="group" aria-label="Window width">
+        {#each [4, 5, 6] as w}
+          <button aria-pressed={win.width === w} onclick={() => setWidth(w)}>{w} frets</button>
+        {/each}
+      </div>
+    {:else if display.mode === 'octaves'}
+      <div class="seg" role="group" aria-label="How many octaves">
+        {#each [1, 2, 3] as n}
+          <button aria-pressed={display.octaves === n} onclick={() => setOctaves(n)}>
+            {n} oct
+          </button>
+        {/each}
+      </div>
+    {/if}
+
+    {#if display.mode !== 'whole'}
+      <div class="row">
+        <button class="x" aria-label={display.mode === 'octaves' ? 'Previous root' : 'Move window down a fret'} onclick={() => nudge(-1)}>◄</button>
+        <span class="readout">
+          {#if display.mode === 'octaves'}
+            {rootLabel} → {topLabel}
+          {:else}
+            frets {win.startFret}–{win.startFret + win.width - 1}
+          {/if}
+        </span>
+        <button class="x" aria-label={display.mode === 'octaves' ? 'Next root' : 'Move window up a fret'} onclick={() => nudge(1)}>►</button>
+      </div>
+      {#if display.mode === 'octaves'}
+        <p class="muted">Root {display.anchor + 1} of {anchors.length}, found across every string.</p>
+      {/if}
+    {/if}
 
     <h3>Labels</h3>
     <!-- In overlay the toggle greys out rather than disappearing, and returns at
@@ -210,14 +297,29 @@
 
   <section>
     <h2>{describeContent(content)}</h2>
-    <Fretboard {tuning} {dots} {cells} {win} onCenter={center} onPlayNote={playNote} />
+    <Fretboard
+      {tuning} {dots} {win}
+      cells={neck.cells}
+      barre={neck.barre}
+      showWindow={display.mode === 'position'}
+      onCenter={center}
+      onPlayNote={playNote}
+    />
     <p class="hint">
-      {#if wholeNeck}
-        Every occurrence across the neck. Click a fret to centre the window; ← → nudge it.
+      {#if display.mode === 'whole'}
+        Every occurrence across the neck, all read equally. Click a fret to centre a position.
+      {:else if display.mode === 'octaves'}
+        {display.octaves} octave{display.octaves > 1 ? 's' : ''} up from {rootLabel}. ← → step to the
+        next root. Click any note to hear it.
       {:else if content.kind === 'chord' && slots.length === 1}
-        One note per string, fingerable as it stands. Click a fret to move the position; ← → nudge it.
+        A shape you can hold: one note per string, root included{neck.barre
+          ? `, barred at fret ${neck.barre.fret}`
+          : ''}. ← → move the position.
       {:else}
         Notes in the position. Click a fret to move it; ← → nudge it. Click any note to hear it.
+      {/if}
+      {#if neck.omits.length}
+        <span class="omit">Nothing complete fits here — omits {neck.omits.join(', ')}.</span>
       {/if}
     </p>
     <ul class="legend">
@@ -269,6 +371,7 @@
     font-size: 0.7rem; font-weight: 700; display: grid; place-items: center;
   }
   .hint { color: var(--muted); font-size: 0.78rem; margin: 8px 0 0; }
+  .omit { color: var(--warn); }
 
   .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; padding: 0; margin: 10px 0 0; font-size: 0.78rem; color: var(--muted); }
   .legend li { display: inline-flex; align-items: center; gap: 6px; }

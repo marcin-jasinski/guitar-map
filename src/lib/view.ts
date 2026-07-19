@@ -3,13 +3,14 @@
  * the notes audio plays. Keeping this pure keeps `Fretboard.svelte` dumb: it
  * renders whatever pitch classes it is handed.
  */
-import type { Content, LabelMode } from './store.svelte';
+import type { Content, Display, LabelMode } from './store.svelte';
 import {
   CHORDS,
   LAST_FRET,
   chordNotes,
   diatonicTriads,
   fretMidi,
+  notePc,
   scaleNotes,
   type FretWindow,
   type Note,
@@ -115,41 +116,225 @@ export function noteMap(content: Content, mode: LabelMode): Map<number, Dot> {
 
 export const cellKey = (string: number, fret: number) => `${string}:${fret}`;
 
+/** A run of strings stopped at one fret by a single finger. */
+export type Barre = { fret: number; from: number; to: number };
+export type Board = {
+  cells: Set<string>;
+  barre: Barre | null;
+  /** Chord tones the chosen voicing leaves out — sometimes nothing complete is
+   *  reachable in the window, and saying so beats quietly showing a lie. */
+  omits: string[];
+};
+
+export const contentRoot = (c: Content) => (c.kind === 'chord' ? c.slots[0].root : c.root);
+
 /**
- * Which `(string, fret)` cells actually get a dot. `noteMap` decides what a pitch
- * class *looks* like; this decides *where* it appears, which is what makes the
- * position window worth having.
+ * Every distinct root *pitch* on the neck, ascending. Roots are gathered from
+ * every string rather than just the lowest; a pitch reachable on two strings
+ * appears once, because the octave view is defined by pitch, not by where you
+ * choose to fret it.
  *
- * - Whole neck: every occurrence, everywhere — the reference view.
- * - Window, single chord: **one note per string**, so the shape is a fingering
- *   rather than a cloud of every chord tone in reach.
- * - Window, anything else: every occurrence inside the window. Scales and
- *   arpeggios want the full in-position pattern, and an overlay of 2–3 chords
- *   is about comparing them, so thinning it to one per string would hide the
- *   overlaps that are the whole point (§9).
+ * With `octaves` set, roots too high for that many octaves to fit on the neck
+ * are dropped, so stepping the anchor never lands on a truncated span. If none
+ * fit, every root is offered and the span simply runs out at the last fret.
  */
-export function visibleCells(
+export function rootPitches(tuning: Tuning, content: Content, octaves = 0): number[] {
+  const pc = notePc(contentRoot(content));
+  const top = fretMidi(tuning, tuning.strings.length - 1, LAST_FRET);
+  const found = new Set<number>();
+  for (let s = 0; s < tuning.strings.length; s++) {
+    for (let f = 0; f <= LAST_FRET; f++) {
+      const midi = fretMidi(tuning, s, f);
+      if (midi % 12 === pc) found.add(midi);
+    }
+  }
+  const all = [...found].sort((a, b) => a - b);
+  const fits = all.filter((m) => m + 12 * octaves <= top);
+  return fits.length ? fits : all;
+}
+
+const clampIndex = (i: number, len: number) => Math.max(0, Math.min(len - 1, i));
+
+/** Fret span a hand can cover, and the most fingers it has. */
+const MAX_SPAN = 5;
+const MAX_FINGERS = 4;
+
+/**
+ * What makes one playable shape better than another. A chord missing a defining
+ * tone is more wrong than a chord in inversion, so completeness outweighs having
+ * the root in the bass; both outweigh simply covering more strings.
+ */
+const COMPLETE = 80;
+const ROOT_IN_BASS = 40;
+const PER_STRING = 10;
+const PER_FINGER = 8;
+const PER_FRET_OF_SPAN = 4;
+
+/**
+ * Which `(string, fret)` positions get a dot. `noteMap` decides what a pitch
+ * class *looks* like; this decides *where* it appears.
+ */
+export function board(
   tuning: Tuning,
   win: FretWindow,
   content: Content,
   dots: Map<number, Dot>,
-  wholeNeck: boolean,
-): Set<string> {
+  display: Display,
+): Board {
+  const strings = tuning.strings.length;
   const cells = new Set<string>();
-  const lo = wholeNeck ? 0 : win.startFret;
-  const hi = wholeNeck ? LAST_FRET : Math.min(LAST_FRET, win.startFret + win.width - 1);
-  // ponytail: lowest chord tone on each string. Good enough to finger; a real
-  // voicing chooser (root in the bass, minimal stretch) is the upgrade path.
-  const onePerString = !wholeNeck && content.kind === 'chord' && content.slots.length === 1;
 
-  for (let s = 0; s < tuning.strings.length; s++) {
-    for (let f = lo; f <= hi; f++) {
-      if (!dots.has(fretMidi(tuning, s, f) % 12)) continue;
-      cells.add(cellKey(s, f));
-      if (onePerString) break;
+  if (display.mode === 'octaves') {
+    const roots = rootPitches(tuning, content, display.octaves);
+    const low = roots[clampIndex(display.anchor, roots.length)] ?? 0;
+    const high = low + 12 * display.octaves;
+    for (let s = 0; s < strings; s++) {
+      for (let f = 0; f <= LAST_FRET; f++) {
+        const midi = fretMidi(tuning, s, f);
+        if (midi >= low && midi <= high && dots.has(midi % 12)) cells.add(cellKey(s, f));
+      }
+    }
+    return { cells, barre: null, omits: [] };
+  }
+
+  if (display.mode === 'whole') {
+    for (let s = 0; s < strings; s++) {
+      for (let f = 0; f <= LAST_FRET; f++) {
+        if (dots.has(fretMidi(tuning, s, f) % 12)) cells.add(cellKey(s, f));
+      }
+    }
+    return { cells, barre: null, omits: [] };
+  }
+
+  // A single chord in position becomes a chord you can actually play.
+  if (content.kind === 'chord' && content.slots.length === 1) {
+    return voicing(tuning, win, dots, notePc(content.slots[0].root));
+  }
+
+  const hi = Math.min(LAST_FRET, win.startFret + win.width - 1);
+  for (let s = 0; s < strings; s++) {
+    for (let f = win.startFret; f <= hi; f++) {
+      if (dots.has(fretMidi(tuning, s, f) % 12)) cells.add(cellKey(s, f));
     }
   }
-  return cells;
+  return { cells, barre: null, omits: [] };
+}
+
+/** Chord tones with no cell sounding them, by name. */
+function missing(tuning: Tuning, cells: Set<string>, dots: Map<number, Dot>): string[] {
+  const sounded = new Set(
+    [...cells].map((k) => {
+      const [s, f] = k.split(':').map(Number);
+      return fretMidi(tuning, s, f) % 12;
+    }),
+  );
+  return [...dots.entries()].filter(([pc]) => !sounded.has(pc)).map(([, d]) => d.name);
+}
+
+/** `null` at a string means it is not played. */
+type Shape = (number | null)[];
+
+/**
+ * Work out how the shape is held: the lowest fretted position barres if two or
+ * more strings share it, which is what lets a 6-string shape need only 4 fingers.
+ * A barre cannot cross a string played open, since the finger would stop it.
+ */
+function fingering(shape: Shape): { fingers: number; barre: Barre | null } {
+  const fretted = shape
+    .map((fret, string) => ({ fret, string }))
+    .filter((x): x is { fret: number; string: number } => x.fret !== null && x.fret > 0);
+  if (!fretted.length) return { fingers: 0, barre: null };
+
+  const low = Math.min(...fretted.map((x) => x.fret));
+  const atLow = fretted.filter((x) => x.fret === low);
+  if (atLow.length < 2) return { fingers: fretted.length, barre: null };
+
+  const from = Math.min(...atLow.map((x) => x.string));
+  const to = Math.max(...atLow.map((x) => x.string));
+  for (let s = from; s <= to; s++) if (shape[s] === 0) return { fingers: fretted.length, barre: null };
+
+  const above = fretted.filter((x) => x.fret > low).length;
+  return { fingers: 1 + above, barre: { fret: low, from, to } };
+}
+
+/**
+ * Search every combination of one-note-per-string (or muted) inside the window
+ * and keep the most playable one. Brute force is fine here: a chord offers at
+ * most a couple of frets per string, so this is a few thousand cheap checks.
+ *
+ * Hard requirements — the root must sound, the played strings must be adjacent
+ * (no muted string in the middle), and the shape must fit one hand.
+ */
+function voicing(tuning: Tuning, win: FretWindow, dots: Map<number, Dot>, rootPc: number): Board {
+  const strings = tuning.strings.length;
+  const hi = Math.min(LAST_FRET, win.startFret + win.width - 1);
+
+  const options: Shape[] = [];
+  for (let s = 0; s < strings; s++) {
+    const opts: (number | null)[] = [null];
+    for (let f = win.startFret; f <= hi; f++) {
+      if (dots.has(fretMidi(tuning, s, f) % 12)) opts.push(f);
+    }
+    options.push(opts);
+  }
+
+  let best: { shape: Shape; barre: Barre | null; score: number } | null = null;
+  const shape: Shape = new Array(strings).fill(null);
+
+  const consider = () => {
+    const played = shape.map((f, s) => (f === null ? -1 : s)).filter((s) => s >= 0);
+    if (played.length < 3) return;
+    if (played.at(-1)! - played[0] !== played.length - 1) return; // no interior mutes
+
+    const pcs = played.map((s) => fretMidi(tuning, s, shape[s]!) % 12);
+    if (!pcs.includes(rootPc)) return;
+
+    const frets = played.map((s) => shape[s]!).filter((f) => f > 0);
+    const span = frets.length ? Math.max(...frets) - Math.min(...frets) : 0;
+    if (span > MAX_SPAN) return;
+
+    const { fingers, barre } = fingering(shape);
+    if (fingers > MAX_FINGERS) return;
+
+    const score =
+      (dots.size === new Set(pcs).size ? COMPLETE : 0) +
+      (pcs[0] === rootPc ? ROOT_IN_BASS : 0) +
+      PER_STRING * played.length -
+      PER_FINGER * fingers -
+      PER_FRET_OF_SPAN * span;
+
+    if (!best || score > best.score) best = { shape: [...shape], barre, score };
+  };
+
+  const walk = (s: number) => {
+    if (s === strings) return consider();
+    for (const option of options[s]) {
+      shape[s] = option;
+      walk(s + 1);
+    }
+    shape[s] = null;
+  };
+  walk(0);
+
+  if (!best) {
+    // Nothing playable in this window — fall back to the lowest chord tone per
+    // string so the board never goes blank.
+    const cells = new Set<string>();
+    for (let s = 0; s < strings; s++) {
+      for (let f = win.startFret; f <= hi; f++) {
+        if (dots.has(fretMidi(tuning, s, f) % 12)) {
+          cells.add(cellKey(s, f));
+          break;
+        }
+      }
+    }
+    return { cells, barre: null, omits: missing(tuning, cells, dots) };
+  }
+
+  const chosen: { shape: Shape; barre: Barre | null } = best;
+  const cells = new Set<string>();
+  chosen.shape.forEach((f, s) => f !== null && cells.add(cellKey(s, f)));
+  return { cells, barre: chosen.barre, omits: missing(tuning, cells, dots) };
 }
 
 // ---- playback note selection (§6) ---------------------------------------------
@@ -175,13 +360,14 @@ export function chordVoicing(tuning: Tuning, win: FretWindow, root: string, type
     .sort((a, b) => a - b);
 }
 
-/** One ascending octave of the scale, starting from the lowest root in the window. */
-export function scaleRun(tuning: Tuning, win: FretWindow, root: string, scale: string): number[] {
-  const notes = scaleNotes(root, scale);
-  const start = inWindow(tuning, win, notes[0].pc)[0];
-  if (start === undefined) return [];
-  const intervals = notes.map((n) => (n.pc - notes[0].pc + 12) % 12);
-  return [...intervals, 12].map((iv) => start + iv);
+/** The scale ascending from `startMidi`, closing on the root `octaves` up, so
+ *  playback matches however many octaves the board is showing. */
+export function scaleRun(root: string, scale: string, startMidi: number, octaves = 1): number[] {
+  const intervals = scaleNotes(root, scale).map((n, _, all) => (n.pc - all[0].pc + 12) % 12);
+  const run: number[] = [];
+  for (let o = 0; o < octaves; o++) run.push(...intervals.map((iv) => startMidi + iv + 12 * o));
+  run.push(startMidi + 12 * octaves);
+  return run;
 }
 
 export const chordTypes = Object.keys(CHORDS);

@@ -14,6 +14,19 @@ export type Content =
 
 export type LabelMode = 'names' | 'degrees' | 'intervals';
 
+/**
+ * How much of the neck to draw.
+ * - `position` — the 4–6 fret window; a single chord thins to a fingering.
+ * - `octaves` — 1–3 full octaves upward from one root occurrence, `anchor`
+ *   indexing the root pitches found across every string.
+ * - `whole` — every occurrence, all 25 frets, no emphasis.
+ */
+export type Display = {
+  mode: 'position' | 'octaves' | 'whole';
+  octaves: number;
+  anchor: number;
+};
+
 export type Favorite = {
   id: string;
   name: string;
@@ -21,8 +34,8 @@ export type Favorite = {
   content: Content;
   window: FretWindow;
   labelMode: LabelMode;
-  /** Optional so favorites saved before the toggle existed still load, as "in position". */
-  wholeNeck?: boolean;
+  /** Optional so favorites saved before display modes existed still load. */
+  display?: Display;
 };
 
 export type Store = { version: 1; favorites: Favorite[]; customTunings: Tuning[] };
