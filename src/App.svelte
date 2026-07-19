@@ -12,6 +12,7 @@
     chordSymbol,
     diatonicTriads,
     fretMidi,
+    notePc,
     type Tuning,
   } from './lib/theory';
   import {
@@ -25,11 +26,13 @@
     CHORD_COLORS,
     board,
     chordVoicing,
+    chordVoicings,
     contentRoot,
+    rootAnchors,
     effectiveLabelMode,
     noteMap,
-    rootPitches,
     scaleRun,
+    usableAnchors,
   } from './lib/view';
 
   let tuning = $state<Tuning>(structuredClone(PRESET_TUNINGS[0]));
@@ -42,14 +45,26 @@
 
   let dots = $derived(noteMap(content, labelMode));
   let neck = $derived(board(tuning, win, content, dots, display));
-  let anchors = $derived(rootPitches(tuning, content, display.octaves));
-  let anchorMidi = $derived(
-    anchors[Math.max(0, Math.min(anchors.length - 1, display.anchor))] ?? 0,
+
+  // A single chord steps through shapes; everything else steps through roots.
+  let oneChord = $derived(content.kind === 'chord' && content.slots.length === 1);
+  let voicings = $derived(
+    oneChord ? chordVoicings(tuning, dots, notePc(contentRoot(content))) : [],
   );
+  let anchors = $derived(
+    display.mode === 'octaves' ? usableAnchors(tuning, content, dots, display.octaves) : [],
+  );
+  let steps = $derived(oneChord ? voicings.length : anchors.length);
+  let step = $derived(Math.max(0, Math.min(steps - 1, display.anchor)));
+
+  let anchorMidi = $derived(anchors[step]?.midi ?? 0);
   // Scientific pitch notation, so the readout names an actual pitch: "C3 → C5".
   let anchorOctave = $derived(Math.floor(anchorMidi / 12) - 1);
   let rootLabel = $derived(`${contentRoot(content)}${anchorOctave}`);
   let topLabel = $derived(`${contentRoot(content)}${anchorOctave + display.octaves}`);
+  let voicingFrets = $derived(
+    [...(voicings[step]?.cells ?? [])].map((k) => Number(k.split(':')[1])).filter((f) => f > 0),
+  );
   let activeLabel = $derived(effectiveLabelMode(content, labelMode));
   let triads = $derived(content.kind === 'scale' ? diatonicTriads(content.root, content.scale) : []);
   let root = $derived(content.kind === 'chord' ? content.slots[0].root : content.root);
@@ -60,10 +75,11 @@
   const clamp = (start: number) => Math.max(0, Math.min(LAST_FRET + 1 - win.width, start));
   const center = (fret: number) => (win.startFret = clamp(fret - Math.floor(win.width / 2)));
 
-  /** ◄ ► move the window by a fret, or step to the next root in octave mode. */
+  /** ◄ ► steps whatever the current view is a list of: chord shapes, roots, or
+   *  failing both, the window itself. */
   function nudge(d: number) {
-    if (display.mode === 'octaves') {
-      display.anchor = Math.max(0, Math.min(anchors.length - 1, display.anchor + d));
+    if (oneChord || display.mode === 'octaves') {
+      display.anchor = Math.max(0, Math.min(steps - 1, step + d));
     } else {
       win.startFret = clamp(win.startFret + d);
     }
@@ -79,8 +95,11 @@
   function setOctaves(n: number) {
     display.octaves = n;
     display.mode = 'octaves';
-    display.anchor = Math.min(display.anchor, rootPitches(tuning, content, n).length - 1);
+    display.anchor = Math.min(display.anchor, usableAnchors(tuning, content, dots, n).length - 1);
   }
+
+  /** Changing what is shown invalidates which shape or root you were on. */
+  const resetStep = () => (display.anchor = 0);
 
   /** Switching content type carries the root across rather than resetting it. */
   function setKind(kind: Content['kind']) {
@@ -111,10 +130,10 @@
    *  root reachable in the window. */
   function startMidi(): number {
     if (display.mode === 'octaves') return anchorMidi;
-    const inWin = anchors.find(
+    const inWin = rootAnchors(tuning, content).map((a) => a.midi).find(
       (m) => m >= fretMidi(tuning, 0, win.startFret) && m <= fretMidi(tuning, tuning.strings.length - 1, win.startFret + win.width - 1),
     );
-    return inWin ?? anchors[0] ?? 60;
+    return inWin ?? rootAnchors(tuning, content)[0]?.midi ?? 60;
   }
 
   const snapshot = () => ({
@@ -164,10 +183,10 @@
 
     {#if content.kind === 'scale'}
       <div class="row">
-        <select bind:value={content.root} aria-label="Root note">
+        <select bind:value={content.root} aria-label="Root note" onchange={resetStep}>
           {#each ROOTS as r}<option value={r}>{r}</option>{/each}
         </select>
-        <select bind:value={content.scale} aria-label="Scale" onchange={() => selectDegree(null)}>
+        <select bind:value={content.scale} aria-label="Scale" onchange={() => (selectDegree(null), resetStep())}>
           {#each Object.keys(SCALES) as s}<option value={s}>{s}</option>{/each}
         </select>
       </div>
@@ -192,10 +211,10 @@
       {/if}
     {:else if content.kind === 'arpeggio'}
       <div class="row">
-        <select bind:value={content.root} aria-label="Root note">
+        <select bind:value={content.root} aria-label="Root note" onchange={resetStep}>
           {#each ROOTS as r}<option value={r}>{r}</option>{/each}
         </select>
-        <select bind:value={content.chord} aria-label="Chord type">
+        <select bind:value={content.chord} aria-label="Chord type" onchange={resetStep}>
           {#each Object.keys(CHORDS) as c}<option value={c}>{c}</option>{/each}
         </select>
       </div>
@@ -206,10 +225,10 @@
           {#if slots.length > 1}
             <span class="swatch" style="background:{CHORD_COLORS[i]}" aria-hidden="true">{i + 1}</span>
           {/if}
-          <select bind:value={slot.root} aria-label="Chord {i + 1} root">
+          <select bind:value={slot.root} aria-label="Chord {i + 1} root" onchange={resetStep}>
             {#each ROOTS as r}<option value={r}>{r}</option>{/each}
           </select>
-          <select bind:value={slot.type} aria-label="Chord {i + 1} type">
+          <select bind:value={slot.type} aria-label="Chord {i + 1} type" onchange={resetStep}>
             {#each Object.keys(CHORDS) as c}<option value={c}>{c}</option>{/each}
           </select>
           <button
@@ -232,50 +251,60 @@
     {/if}
 
     <h3>Show</h3>
+    <!-- A chord is a shape to hold, so it offers shapes; a scale or arpeggio is
+         a pattern to run, so it offers a position or a span of octaves. -->
     <div class="seg" role="group" aria-label="How much of the neck to show">
-      <button aria-pressed={display.mode === 'position'} onclick={() => (display.mode = 'position')}>
-        Position
-      </button>
-      <button aria-pressed={display.mode === 'octaves'} onclick={() => (display.mode = 'octaves')}>
-        Octaves
-      </button>
+      {#if oneChord}
+        <button aria-pressed={display.mode !== 'whole'} onclick={() => (display.mode = 'position')}>
+          Voicings
+        </button>
+      {:else}
+        <button aria-pressed={display.mode === 'position'} onclick={() => (display.mode = 'position')}>
+          Position
+        </button>
+        <button aria-pressed={display.mode === 'octaves'} onclick={() => (display.mode = 'octaves')}>
+          Octaves
+        </button>
+      {/if}
       <button aria-pressed={display.mode === 'whole'} onclick={() => (display.mode = 'whole')}>
         Whole neck
       </button>
     </div>
 
-    <!-- Width and octave count belong to one mode each, so the other one's
-         control is hidden rather than left sitting there meaning nothing. -->
-    {#if display.mode === 'position'}
-      <div class="seg" role="group" aria-label="Window width">
-        {#each [4, 5, 6] as w}
-          <button aria-pressed={win.width === w} onclick={() => setWidth(w)}>{w} frets</button>
-        {/each}
-      </div>
-    {:else if display.mode === 'octaves'}
-      <div class="seg" role="group" aria-label="How many octaves">
-        {#each [1, 2, 3] as n}
-          <button aria-pressed={display.octaves === n} onclick={() => setOctaves(n)}>
-            {n} oct
-          </button>
-        {/each}
-      </div>
+    {#if display.mode !== 'whole' && !oneChord}
+      {#if display.mode === 'position'}
+        <div class="seg" role="group" aria-label="Window width">
+          {#each [4, 5, 6] as w}
+            <button aria-pressed={win.width === w} onclick={() => setWidth(w)}>{w} frets</button>
+          {/each}
+        </div>
+      {:else}
+        <div class="seg" role="group" aria-label="How many octaves">
+          {#each [1, 2, 3] as n}
+            <button aria-pressed={display.octaves === n} onclick={() => setOctaves(n)}>{n} oct</button>
+          {/each}
+        </div>
+      {/if}
     {/if}
 
     {#if display.mode !== 'whole'}
       <div class="row">
-        <button class="x" aria-label={display.mode === 'octaves' ? 'Previous root' : 'Move window down a fret'} onclick={() => nudge(-1)}>◄</button>
+        <button class="x" aria-label="Previous" onclick={() => nudge(-1)}>◄</button>
         <span class="readout">
-          {#if display.mode === 'octaves'}
+          {#if oneChord}
+            {voicingFrets.length ? `frets ${Math.min(...voicingFrets)}–${Math.max(...voicingFrets)}` : 'open'}
+          {:else if display.mode === 'octaves'}
             {rootLabel} → {topLabel}
           {:else}
             frets {win.startFret}–{win.startFret + win.width - 1}
           {/if}
         </span>
-        <button class="x" aria-label={display.mode === 'octaves' ? 'Next root' : 'Move window up a fret'} onclick={() => nudge(1)}>►</button>
+        <button class="x" aria-label="Next" onclick={() => nudge(1)}>►</button>
       </div>
-      {#if display.mode === 'octaves'}
-        <p class="muted">Root {display.anchor + 1} of {anchors.length}, found across every string.</p>
+      {#if oneChord}
+        <p class="muted">Shape {step + 1} of {steps}, low to high.</p>
+      {:else if display.mode === 'octaves'}
+        <p class="muted">Root {step + 1} of {steps}, across every string.</p>
       {/if}
     {/if}
 
@@ -311,10 +340,10 @@
       {:else if display.mode === 'octaves'}
         {display.octaves} octave{display.octaves > 1 ? 's' : ''} up from {rootLabel}. ← → step to the
         next root. Click any note to hear it.
-      {:else if content.kind === 'chord' && slots.length === 1}
-        A shape you can hold: one note per string, root included{neck.barre
+      {:else if oneChord}
+        A shape you can hold: root included{neck.barre
           ? `, barred at fret ${neck.barre.fret}`
-          : ''}. ← → move the position.
+          : ''}. ← → step through the {steps} shapes up the neck.
       {:else}
         Notes in the position. Click a fret to move it; ← → nudge it. Click any note to hear it.
       {/if}

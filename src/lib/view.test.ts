@@ -3,9 +3,11 @@ import {
   CHORD_COLORS,
   board,
   chordVoicing,
+  chordVoicings,
   effectiveLabelMode,
   noteMap,
-  rootPitches,
+  rootAnchors,
+  usableAnchors,
   scaleRun,
   type Board,
 } from './view';
@@ -123,9 +125,22 @@ describe('which positions get drawn', () => {
   };
 
   test('position mode draws nothing outside the window', () => {
-    for (const c of [scale, chord, arp, overlay]) {
+    // A single chord is exempt: it steps through shapes, not window positions.
+    for (const c of [scale, arp, overlay]) {
       expect(frets(at(c, POS)).every((f) => f >= 5 && f <= 9), c.kind).toBe(true);
     }
+  });
+
+  test('a single chord ignores the window and follows its shape index instead', () => {
+    const dots = noteMap(chord, 'names');
+    const shapes = chordVoicings(standard, dots, notePc('C'));
+    const first = board(standard, { startFret: 5, width: 5 }, chord, dots, POS);
+    const same = board(standard, { startFret: 17, width: 4 }, chord, dots, POS);
+    expect([...same.cells]).toEqual([...first.cells]);
+    expect([...first.cells]).toEqual([...shapes[0].cells]);
+
+    const second = board(standard, win, chord, dots, { ...POS, anchor: 1 });
+    expect([...second.cells]).not.toEqual([...first.cells]);
   });
 
   test('scales and arpeggios keep the full in-position pattern', () => {
@@ -159,57 +174,82 @@ describe('octave mode', () => {
   const arp: Content = { kind: 'arpeggio', root: 'C', chord: 'major' };
   const display = (octaves: number, anchor = 0): Display => ({ mode: 'octaves', octaves, anchor });
   const at = (c: Content, d: Display) => board(standard, win, c, noteMap(c, 'names'), d);
-  const midis = (b: Board) =>
-    [...b.cells].map((k) => {
-      const [s, f] = k.split(':').map(Number);
-      return fretMidi(standard, s, f);
-    });
+  const cellsOf = (b: Board) => [...b.cells].map((k) => k.split(':').map(Number));
+  const midis = (b: Board) => cellsOf(b).map(([s, f]) => fretMidi(standard, s, f));
 
-  test('root pitches are gathered from every string, ascending and distinct', () => {
-    const roots = rootPitches(standard, scale);
-    expect(roots).toEqual([...roots].sort((a, b) => a - b));
-    expect(new Set(roots).size).toBe(roots.length);
-    expect(roots.every((m) => m % 12 === 0)).toBe(true);
-    // C3 = 48 first appears on the A string and C4 = 60 on the D string, so
-    // neither comes from the lowest string: all strings really are scanned.
-    expect(roots).toContain(48);
-    expect(roots).toContain(60);
+  test('root positions come from every string and keep same-pitch duplicates', () => {
+    const roots = rootAnchors(standard, scale);
+    expect(roots.map((a) => a.midi)).toEqual([...roots.map((a) => a.midi)].sort((a, b) => a - b));
+    expect(roots.every((a) => a.midi % 12 === 0)).toBe(true);
+    expect(new Set(roots.map((a) => a.string)).size).toBe(6);
+    // C4 is reachable on the D, G and B strings: three different places to start.
+    expect(roots.filter((a) => a.midi === 60).length).toBeGreaterThan(1);
   });
 
-  test('the span is exactly the requested number of octaves above the anchor', () => {
+  test('each pitch is drawn once — one path, not every duplicate on the neck', () => {
     for (const count of [1, 2, 3]) {
-      const low = rootPitches(standard, scale, count)[0];
-      const m = midis(at(scale, display(count, 0)));
-      expect(Math.min(...m)).toBe(low);
-      expect(Math.max(...m)).toBeLessThanOrEqual(low + 12 * count);
-      // The closing root is reachable, so the octave really does complete.
-      expect(m).toContain(low + 12 * count);
+      const b = at(scale, display(count, 0));
+      const m = midis(b);
+      expect(new Set(m).size, `${count} oct`).toBe(m.length);
     }
   });
 
-  test('anchors that could not fit the requested octaves are not offered', () => {
-    // A 3-octave span from a high root would run off the end of a 24-fret neck.
-    const one = rootPitches(standard, scale, 1);
-    const three = rootPitches(standard, scale, 3);
-    expect(three.length).toBeLessThan(one.length);
-    const top = fretMidi(standard, standard.strings.length - 1, 24);
-    expect(three.every((m) => m + 36 <= top)).toBe(true);
+  test('the path starts on the active root and closes an octave up', () => {
+    const anchor = usableAnchors(standard, scale, noteMap(scale, 'names'), 2)[0];
+    const m = midis(at(scale, display(2, 0)));
+    expect(Math.min(...m)).toBe(anchor.midi);
+    expect(Math.max(...m)).toBe(anchor.midi + 24);
   });
 
-  test('stepping the anchor moves to the next root, not the next fret', () => {
-    const roots = rootPitches(standard, scale);
-    expect(Math.min(...midis(at(scale, display(1, 0))))).toBe(roots[0]);
-    expect(Math.min(...midis(at(scale, display(1, 1))))).toBe(roots[1]);
+  test('it draws far fewer notes than every position in the range would', () => {
+    const b = at(scale, display(2, 0));
+    const anchor = usableAnchors(standard, scale, noteMap(scale, 'names'), 2)[0];
+    let everywhere = 0;
+    for (let s = 0; s < 6; s++) {
+      for (let f = 0; f <= 24; f++) {
+        const midi = fretMidi(standard, s, f);
+        if (midi >= anchor.midi && midi <= anchor.midi + 24 && [0, 2, 4, 5, 7, 9, 11].includes(midi % 12)) {
+          everywhere++;
+        }
+      }
+    }
+    expect(b.cells.size).toBeLessThan(everywhere / 2);
+  });
+
+  test('the shape stays under the hand: at most three notes per string, in reach', () => {
+    for (const anchorIndex of [0, 1, 2, 3]) {
+      const b = at(scale, display(2, anchorIndex));
+      const byString = new Map<number, number[]>();
+      for (const [s, f] of cellsOf(b)) byString.set(s, [...(byString.get(s) ?? []), f]);
+      for (const [s, frets] of byString) {
+        expect(frets.length, `string ${s}`).toBeLessThanOrEqual(3);
+        expect(Math.max(...frets) - Math.min(...frets), `string ${s}`).toBeLessThanOrEqual(4);
+      }
+    }
+  });
+
+  test('stepping the anchor moves to the next root position', () => {
+    const anchors = usableAnchors(standard, scale, noteMap(scale, 'names'), 1);
+    expect(Math.min(...midis(at(scale, display(1, 0))))).toBe(anchors[0].midi);
+    expect(Math.min(...midis(at(scale, display(1, 1))))).toBe(anchors[1].midi);
+  });
+
+  test('anchors that could not complete the span are not offered', () => {
+    const dots = noteMap(scale, 'names');
+    const one = usableAnchors(standard, scale, dots, 1);
+    const three = usableAnchors(standard, scale, dots, 3);
+    expect(three.length).toBeLessThan(one.length);
   });
 
   test('an out-of-range anchor clamps instead of blanking the board', () => {
     expect(at(scale, display(1, 999)).cells.size).toBeGreaterThan(0);
   });
 
-  test('arpeggios get octave mode too, showing only chord tones', () => {
+  test('arpeggios get the same treatment, showing only chord tones', () => {
     const b = at(arp, display(2));
-    expect(b.cells.size).toBeGreaterThan(0);
-    expect(new Set(midis(b).map((m) => m % 12))).toEqual(new Set([0, 4, 7]));
+    const m = midis(b);
+    expect(new Set(m).size).toBe(m.length);
+    expect(new Set(m.map((x) => x % 12))).toEqual(new Set([0, 4, 7]));
   });
 });
 

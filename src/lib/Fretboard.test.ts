@@ -37,10 +37,14 @@ test('position mode keeps the window band', () => {
   expect(draw(scale, { mode: 'position', octaves: 1, anchor: 0 })).toContain('opacity=".14"');
 });
 
-test('octave mode spans beyond the window without a window band', () => {
+test('octave mode draws one compact path, ignoring the window entirely', () => {
   const body = draw(scale, { mode: 'octaves', octaves: 2, anchor: 0 });
   expect(body).not.toContain('opacity=".14"');
-  expect(body).toContain('fret 15"');
+  // The path runs frets 8–13 from the root on the low E string: past the
+  // 5–9 window at one end, and starting well after it at the other.
+  expect(body).toContain('fret 13"');
+  expect(body).not.toContain('fret 5"');
+  expect(body).not.toContain('fret 0"');
 });
 
 test('a barred chord draws the bar and says so to a screen reader', () => {

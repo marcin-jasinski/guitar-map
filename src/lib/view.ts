@@ -128,28 +128,89 @@ export type Board = {
 
 export const contentRoot = (c: Content) => (c.kind === 'chord' ? c.slots[0].root : c.root);
 
+/** A root the octave view can start from: a real place to put your finger. */
+export type Anchor = { string: number; fret: number; midi: number };
+
 /**
- * Every distinct root *pitch* on the neck, ascending. Roots are gathered from
- * every string rather than just the lowest; a pitch reachable on two strings
- * appears once, because the octave view is defined by pitch, not by where you
- * choose to fret it.
- *
- * With `octaves` set, roots too high for that many octaves to fit on the neck
- * are dropped, so stepping the anchor never lands on a truncated span. If none
- * fit, every root is offered and the span simply runs out at the last fret.
+ * Every root position on the neck, ascending. Roots are gathered from every
+ * string, and two roots at the same pitch on different strings are both kept —
+ * they start different shapes, so they are genuinely different places to begin.
  */
-export function rootPitches(tuning: Tuning, content: Content, octaves = 0): number[] {
+export function rootAnchors(tuning: Tuning, content: Content): Anchor[] {
   const pc = notePc(contentRoot(content));
-  const top = fretMidi(tuning, tuning.strings.length - 1, LAST_FRET);
-  const found = new Set<number>();
-  for (let s = 0; s < tuning.strings.length; s++) {
-    for (let f = 0; f <= LAST_FRET; f++) {
-      const midi = fretMidi(tuning, s, f);
-      if (midi % 12 === pc) found.add(midi);
+  const out: Anchor[] = [];
+  for (let string = 0; string < tuning.strings.length; string++) {
+    for (let fret = 0; fret <= LAST_FRET; fret++) {
+      const midi = fretMidi(tuning, string, fret);
+      if (midi % 12 === pc) out.push({ string, fret, midi });
     }
   }
-  const all = [...found].sort((a, b) => a - b);
-  const fits = all.filter((m) => m + 12 * octaves <= top);
+  return out.sort((a, b) => a.midi - b.midi || a.string - b.string);
+}
+
+/** How a hand covers a scale: at most three notes per string, within reach. */
+const NOTES_PER_STRING = 3;
+const REACH = 4;
+
+/**
+ * One ascending path from a single root, not every position in the pitch range.
+ * Each pitch is placed once, staying on a string until the hand is full or the
+ * reach is spent, which is what produces the familiar two-and-three-notes-per-
+ * string shape rather than a cloud of duplicates.
+ */
+export function octavePath(
+  tuning: Tuning,
+  dots: Map<number, Dot>,
+  anchor: Anchor,
+  octaves: number,
+): Set<string> {
+  const cells = new Set<string>();
+  const open = (s: number) => fretMidi(tuning, s, 0);
+  const top = anchor.midi + 12 * octaves;
+
+  let string = anchor.string;
+  let placed = 0;
+  let first = anchor.fret;
+
+  const fits = (s: number, midi: number) => {
+    const fret = midi - open(s);
+    if (fret < 0 || fret > LAST_FRET) return false;
+    if (placed === 0) return true;
+    return placed < NOTES_PER_STRING && fret - first <= REACH;
+  };
+
+  for (let midi = anchor.midi; midi <= top; midi++) {
+    if (!dots.has(midi % 12)) continue;
+    while (!fits(string, midi) && string + 1 < tuning.strings.length) {
+      string++;
+      placed = 0;
+    }
+    const fret = midi - open(string);
+    if (fret < 0 || fret > LAST_FRET) break;
+    if (placed === 0) first = fret;
+    cells.add(cellKey(string, fret));
+    placed++;
+  }
+  return cells;
+}
+
+/** Anchors whose path actually completes the requested octaves on this neck. */
+export function usableAnchors(
+  tuning: Tuning,
+  content: Content,
+  dots: Map<number, Dot>,
+  octaves: number,
+): Anchor[] {
+  const all = rootAnchors(tuning, content);
+  const fits = all.filter((a) => {
+    const top = a.midi + 12 * octaves;
+    const path = octavePath(tuning, dots, a, octaves);
+    for (const key of path) {
+      const [s, f] = key.split(':').map(Number);
+      if (fretMidi(tuning, s, f) === top) return true;
+    }
+    return false;
+  });
   return fits.length ? fits : all;
 }
 
@@ -173,6 +234,9 @@ const PER_FRET_OF_SPAN = 4;
 /**
  * Which `(string, fret)` positions get a dot. `noteMap` decides what a pitch
  * class *looks* like; this decides *where* it appears.
+ *
+ * `display.anchor` indexes whichever list the current view steps through:
+ * chord voicings, or root positions in octave mode.
  */
 export function board(
   tuning: Tuning,
@@ -184,19 +248,6 @@ export function board(
   const strings = tuning.strings.length;
   const cells = new Set<string>();
 
-  if (display.mode === 'octaves') {
-    const roots = rootPitches(tuning, content, display.octaves);
-    const low = roots[clampIndex(display.anchor, roots.length)] ?? 0;
-    const high = low + 12 * display.octaves;
-    for (let s = 0; s < strings; s++) {
-      for (let f = 0; f <= LAST_FRET; f++) {
-        const midi = fretMidi(tuning, s, f);
-        if (midi >= low && midi <= high && dots.has(midi % 12)) cells.add(cellKey(s, f));
-      }
-    }
-    return { cells, barre: null, omits: [] };
-  }
-
   if (display.mode === 'whole') {
     for (let s = 0; s < strings; s++) {
       for (let f = 0; f <= LAST_FRET; f++) {
@@ -206,9 +257,18 @@ export function board(
     return { cells, barre: null, omits: [] };
   }
 
-  // A single chord in position becomes a chord you can actually play.
+  // A single chord is a shape to hold, so it steps through voicings rather than
+  // sliding a window that often returns the same shape twice.
   if (content.kind === 'chord' && content.slots.length === 1) {
-    return voicing(tuning, win, dots, notePc(content.slots[0].root));
+    const shapes = chordVoicings(tuning, dots, notePc(content.slots[0].root));
+    return shapes[clampIndex(display.anchor, shapes.length)] ?? { cells, barre: null, omits: [] };
+  }
+
+  if (display.mode === 'octaves') {
+    const anchors = usableAnchors(tuning, content, dots, display.octaves);
+    const anchor = anchors[clampIndex(display.anchor, anchors.length)];
+    if (!anchor) return { cells, barre: null, omits: [] };
+    return { cells: octavePath(tuning, dots, anchor, display.octaves), barre: null, omits: [] };
   }
 
   const hi = Math.min(LAST_FRET, win.startFret + win.width - 1);
@@ -265,7 +325,7 @@ function fingering(shape: Shape): { fingers: number; barre: Barre | null } {
  * Hard requirements — the root must sound, the played strings must be adjacent
  * (no muted string in the middle), and the shape must fit one hand.
  */
-function voicing(tuning: Tuning, win: FretWindow, dots: Map<number, Dot>, rootPc: number): Board {
+function voicing(tuning: Tuning, win: FretWindow, dots: Map<number, Dot>, rootPc: number): Board | null {
   const strings = tuning.strings.length;
   const hi = Math.min(LAST_FRET, win.startFret + win.width - 1);
 
@@ -316,25 +376,35 @@ function voicing(tuning: Tuning, win: FretWindow, dots: Map<number, Dot>, rootPc
   };
   walk(0);
 
-  if (!best) {
-    // Nothing playable in this window — fall back to the lowest chord tone per
-    // string so the board never goes blank.
-    const cells = new Set<string>();
-    for (let s = 0; s < strings; s++) {
-      for (let f = win.startFret; f <= hi; f++) {
-        if (dots.has(fretMidi(tuning, s, f) % 12)) {
-          cells.add(cellKey(s, f));
-          break;
-        }
-      }
-    }
-    return { cells, barre: null, omits: missing(tuning, cells, dots) };
-  }
+  if (!best) return null;
 
   const chosen: { shape: Shape; barre: Barre | null } = best;
   const cells = new Set<string>();
   chosen.shape.forEach((f, s) => f !== null && cells.add(cellKey(s, f)));
   return { cells, barre: chosen.barre, omits: missing(tuning, cells, dots) };
+}
+
+/** The hand span a voicing search looks through at one time. */
+const VOICING_WINDOW = 5;
+
+/**
+ * Every distinct playable shape for a chord, low to high. Sliding a search
+ * window up the neck and discarding repeats gives the handful of real voicings
+ * — which is what a chord view wants to step through, since nudging a window
+ * by one fret usually returns the very same shape.
+ */
+export function chordVoicings(tuning: Tuning, dots: Map<number, Dot>, rootPc: number): Board[] {
+  const seen = new Set<string>();
+  const out: Board[] = [];
+  for (let startFret = 0; startFret + VOICING_WINDOW - 1 <= LAST_FRET; startFret++) {
+    const found = voicing(tuning, { startFret, width: VOICING_WINDOW }, dots, rootPc);
+    if (!found) continue;
+    const key = [...found.cells].sort().join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(found);
+  }
+  return out;
 }
 
 // ---- playback note selection (§6) ---------------------------------------------
