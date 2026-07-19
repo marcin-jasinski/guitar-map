@@ -43,12 +43,18 @@ left to decide before implementation starts — this map does not build the webs
 - [Design save/favorites persistence](tickets/006-save-favorites.md) — favorites = full view
   snapshots in localStorage (versioned JSON, ~50 soft cap), custom tunings auto-collected into
   the picker, auto-generated editable names, list panel with load/rename/delete.
+- [Fretboard visual and interaction design](tickets/007-fretboard-visual-design.md) — horizontal
+  dense neck (whole-neck with in-place highlighted 5-fret window; no separate position-only mode),
+  runtime label toggle (names/degrees/intervals, default names), content types by interval
+  color + outline with the arpeggio as a directional arrowed path. Prototype:
+  [`007-fretboard.html`](tickets/prototypes/007-fretboard.html).
 
 ## Not yet specified
 
 - Modes of harmonic/melodic minor, and richer extended chords (9ths/11ths/13ths) beyond the
   launch set fixed in TICKET-002 — candidates for a post-launch content expansion.
-- How many frets are shown in whole-neck view (12 vs full fretboard length).
+- How many frets are shown in whole-neck view (12 vs full fretboard length) — orientation and
+  window behaviour are now settled (TICKET-007); only the whole-neck fret count remains open.
 - Realistic sample-based audio as a post-launch upgrade over the launch Web Audio synthesis
   (TICKET-005) — needs sample assets + licensing + pitch-shifting.
 - Whether chord/scale results can be exported or shared (link, image, PDF) — not asked

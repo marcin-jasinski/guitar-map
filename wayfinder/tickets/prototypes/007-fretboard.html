@@ -1,0 +1,328 @@
+<!--
+  PROTOTYPE — throwaway. TICKET-007 Fretboard visual & interaction design.
+  Three radically different fretboard variants on one page, switchable via
+  ?variant=A|B|C, the floating bottom bar, or arrow keys.
+  Example content everywhere: C major scale, standard tuning (EADGBE),
+  overlaying a Cmaj7 chord (triad C-E-G + 7th B) and a Cmaj7 arpeggio path,
+  so the three content-types coexist on one board. Not production code.
+-->
+<title>Fretboard prototype — TICKET-007</title>
+<style>
+  :root {
+    --bg: #edeae3; --panel: #ffffff; --ink: #26221c; --muted: #736c60;
+    --hair: #d8d3c8; --accent: #c08a2d; --accent-ink: #ffffff;
+    /* content encodings (constant across themes — they sit on wood) */
+    --c-root: #e5484d; --c-triad: #30a46c; --c-fifth: #4c8dff;
+    --c-seventh: #a86ddf; --c-scale: #cbb892; --c-arp: #f2b134;
+    /* the neck is a physical object: fixed in both themes */
+    --wood-1: #3a2417; --wood-2: #4a2f1d; --wire: #b9b4a7;
+    --string: #d8d2c4; --inlay: #ece6da;
+    --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16130f; --panel:#1e1a15; --ink:#ece7dd; --muted:#9a9184; --hair:#322c24; }
+  }
+  :root[data-theme="light"] { --bg:#edeae3; --panel:#ffffff; --ink:#26221c; --muted:#736c60; --hair:#d8d3c8; }
+  :root[data-theme="dark"]  { --bg:#16130f; --panel:#1e1a15; --ink:#ece7dd; --muted:#9a9184; --hair:#322c24; }
+
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-ui);
+         line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width: 980px; margin:0 auto; padding: 28px 20px 120px; }
+
+  header.h { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 14px; margin-bottom:4px; }
+  header.h h1 { font-size:1.15rem; font-weight:650; letter-spacing:-0.01em; margin:0; }
+  header.h .sub { color:var(--muted); font-size:.86rem; }
+  .vtag { font-family:var(--font-mono); font-size:.74rem; color:var(--accent);
+          border:1px solid var(--accent); border-radius:999px; padding:1px 8px; }
+
+  .card { background:var(--panel); border:1px solid var(--hair); border-radius:12px;
+          padding:16px; margin-top:16px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .vhead { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin-bottom:4px; }
+  .vhead h2 { font-size:1rem; margin:0; font-weight:640; }
+  .vhead p { margin:0; color:var(--muted); font-size:.84rem; flex:1 1 220px; }
+
+  .board-scroll { overflow-x:auto; padding-bottom:4px; }
+  svg { display:block; }
+  svg text { font-family:var(--font-mono); }
+
+  .controls { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 2px; }
+  button.ctl { font:inherit; font-size:.82rem; color:var(--ink); background:transparent;
+    border:1px solid var(--hair); border-radius:8px; padding:5px 11px; cursor:pointer; }
+  button.ctl[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  button.ctl:hover { border-color:var(--accent); }
+  button.ctl:focus-visible, .bar button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:12px; font-size:.8rem; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .sw { width:14px; height:14px; border-radius:50%; flex:none; }
+  .sw.ring { background:transparent; border:2.5px solid var(--c-seventh); }
+  .sw.sq { border-radius:3px; }
+  .sw.line { width:20px; height:0; border-radius:0; border-top:3px solid var(--c-arp); }
+
+  /* variant C sidebar layout */
+  .clayout { display:grid; grid-template-columns: 190px 1fr; gap:16px; align-items:start; }
+  @media (max-width:640px){ .clayout{ grid-template-columns:1fr; } }
+  .cside h3 { font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 6px; }
+  .cside .legend { flex-direction:column; gap:8px; margin-top:0; }
+
+  /* variant B minimap */
+  .minimap { margin-top:10px; }
+  .minimap-hint { font-size:.78rem; color:var(--muted); margin:2px 0 0; }
+
+  /* floating switcher */
+  .bar { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:50;
+    display:flex; align-items:center; gap:4px; background:var(--panel);
+    border:1px solid var(--hair); border-radius:999px; padding:6px 8px;
+    box-shadow:0 6px 24px rgba(0,0,0,.18); }
+  .bar button { font:inherit; border:none; background:transparent; color:var(--ink);
+    cursor:pointer; width:34px; height:34px; border-radius:50%; font-size:1.1rem; }
+  .bar button:hover { background:var(--hair); }
+  .bar .lbl { font-size:.82rem; padding:0 10px; min-width:150px; text-align:center;
+    font-family:var(--font-mono); }
+  .bar .lbl b { color:var(--accent); }
+</style>
+
+<div class="wrap">
+  <header class="h">
+    <h1>Fretboard — visual &amp; interaction study</h1>
+    <span class="vtag">TICKET-007 · prototype</span>
+    <span class="sub">C major scale · standard tuning · Cmaj7 chord + arpeggio overlaid</span>
+  </header>
+  <div id="stage"></div>
+</div>
+
+<nav class="bar" aria-label="Variant switcher">
+  <button id="prev" title="Previous (←)">‹</button>
+  <span class="lbl"><b id="vkey">A</b> — <span id="vname"></span></span>
+  <button id="next" title="Next (→)">›</button>
+</nav>
+
+<script>
+// ---- music model -------------------------------------------------------
+const NAMES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const OPEN  = [4,9,2,7,11,4];              // EADGBE low->high, pitch classes
+const BASE  = [0,5,10,15,19,24];           // relative semitone of open strings
+const STR   = ['E','A','D','G','B','e'];
+const SCALE = new Set([0,2,4,5,7,9,11]);   // C major
+const DEG   = {0:'1',2:'2',4:'3',5:'4',7:'5',9:'6',11:'7'};
+const IVL   = {0:'R',2:'2',4:'3',5:'4',7:'5',9:'6',11:'7'};
+const FRETS = 12;
+// Cmaj7 arpeggio, ascending diagonal in frets 7–11 (2 octaves): C E G B C E G B C
+const ARP = [[0,8],[1,7],[1,10],[2,9],[2,10],[3,9],[4,8],[5,7],[5,8]];
+const arpKey = (s,f)=>s+':'+f;
+const ARPSET = new Map(ARP.map((c,i)=>[arpKey(c[0],c[1]), i+1]));
+const INLAYS = [3,5,7,9,12];
+
+function role(pc){ if(pc===0) return 'root'; if(pc===4||pc===7) return 'triad';
+  if(pc===11) return 'seventh'; return 'scale'; }
+function cell(s,f){ const pc=(OPEN[s]+f)%12;
+  return { pc, name:NAMES[pc], deg:DEG[pc], ivl:IVL[pc], role:role(pc),
+           inScale:SCALE.has(pc), arp:ARPSET.get(arpKey(s,f)) }; }
+const COLOR = { root:'var(--c-root)', triad:'var(--c-triad)', seventh:'var(--c-seventh)', scale:'var(--c-scale)' };
+
+// window state (5-fret position, TICKET-003)
+const st = { winStart: 7 };
+const winEnd = () => st.winStart + 4;
+const inWin = f => f>=st.winStart && f<=winEnd();
+
+// ---- variant A: horizontal, note names, shape-coded ---------------------
+function variantA(){
+  const state = { showWindow:true };
+  const el = document.createElement('div'); el.className='card';
+  const render = ()=>{
+    const L=46,T=26,fg=60,sg=42,R=20,B=30;
+    const W=L+FRETS*fg+R, H=T+5*sg+B;
+    const x=f=>L+f*fg, y=s=>T+(5-s)*sg;
+    let p=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Horizontal fretboard, note names">`;
+    p+=`<rect x="${L-fg*0.5}" y="${T-14}" width="${FRETS*fg+fg*0.5}" height="${5*sg+28}" rx="6" fill="url(#wood)"/>`;
+    // inlays
+    for(const fr of INLAYS){ const cx=x(fr), cy=T+2.5*sg;
+      if(fr===12){ p+=`<circle cx="${cx}" cy="${cy-sg}" r="5" fill="var(--inlay)" opacity=".5"/><circle cx="${cx}" cy="${cy+sg}" r="5" fill="var(--inlay)" opacity=".5"/>`; }
+      else p+=`<circle cx="${cx}" cy="${cy}" r="5" fill="var(--inlay)" opacity=".45"/>`; }
+    // fret wires + numbers
+    for(let f=1;f<=FRETS;f++){ const wx=L+(f-0.5)*fg;
+      p+=`<line x1="${wx}" y1="${T-6}" x2="${wx}" y2="${T+5*sg+6}" stroke="var(--wire)" stroke-width="${f===1?4:2}"/>`; }
+    for(let f=0;f<=FRETS;f++) p+=`<text x="${x(f)}" y="${H-10}" fill="var(--muted)" font-size="11" text-anchor="middle">${f}</text>`;
+    // strings
+    for(let s=0;s<6;s++){ p+=`<line x1="${L-fg*0.4}" y1="${y(s)}" x2="${x(FRETS)+14}" y2="${y(s)}" stroke="var(--string)" stroke-width="${1+s*0.35}"/>`;
+      p+=`<text x="${L-fg*0.55}" y="${y(s)+4}" fill="var(--muted)" font-size="11" text-anchor="end">${STR[s]}</text>`; }
+    // dim outside window
+    if(state.showWindow){ const wx0=L+(st.winStart-0.5)*fg, ww=5*fg;
+      p+=`<rect x="${L-fg*0.5}" y="${T-14}" width="${wx0-(L-fg*0.5)}" height="${5*sg+28}" fill="var(--panel)" opacity=".62"/>`;
+      p+=`<rect x="${wx0+ww}" y="${T-14}" width="${W-R-(wx0+ww)}" height="${5*sg+28}" fill="var(--panel)" opacity=".62"/>`;
+      p+=`<rect x="${wx0}" y="${T-14}" width="${ww}" height="${5*sg+28}" fill="none" stroke="var(--accent)" stroke-width="2" rx="4"/>`; }
+    // arpeggio path (content-type 3 = connecting line)
+    let pts=ARP.map(([s,f])=>`${x(f)},${y(s)}`).join(' ');
+    p+=`<polyline points="${pts}" fill="none" stroke="var(--c-arp)" stroke-width="2.5" opacity=".85" stroke-linejoin="round" stroke-linecap="round"/>`;
+    // dots — shape encodes content type
+    for(let s=0;s<6;s++)for(let f=0;f<=FRETS;f++){ const c=cell(s,f); if(!c.inScale) continue;
+      const cx=x(f),cy=y(s); const dim=state.showWindow&&!inWin(f)?' opacity=".85"':'';
+      if(c.role==='root') p+=`<rect x="${cx-11}" y="${cy-11}" width="22" height="22" rx="3" fill="${COLOR.root}"${dim}/>`;
+      else if(c.role==='triad') p+=`<circle cx="${cx}" cy="${cy}" r="11" fill="${COLOR.triad}"${dim}/>`;
+      else if(c.role==='seventh') p+=`<circle cx="${cx}" cy="${cy}" r="11" fill="var(--panel)" stroke="${COLOR.seventh}" stroke-width="3"${dim}/>`;
+      else p+=`<circle cx="${cx}" cy="${cy}" r="7.5" fill="var(--c-scale)"${dim}/>`;
+      const lc = (c.role==='scale')?'#3a2417':(c.role==='seventh'?'var(--c-seventh)':'#fff');
+      const fs = c.role==='scale'?9:10;
+      p+=`<text x="${cx}" y="${cy+fs*0.36}" text-anchor="middle" font-size="${fs}" fill="${lc}" font-weight="600">${c.name}</text>`; }
+    p+=`<defs><linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--wood-2)"/><stop offset="1" stop-color="var(--wood-1)"/></linearGradient></defs></svg>`;
+    el.innerHTML =
+      `<div class="vhead"><h2>A — Horizontal, whole-neck</h2>
+        <p>The classic chart layout. Note names on every tone; the whole neck at once with a movable
+        5-fret position box. Content types read by <b>shape</b>.</p></div>
+      <div class="controls">
+        <button class="ctl" id="a-win" aria-pressed="${state.showWindow}">Position window: ${state.showWindow?'on':'off'}</button>
+        <button class="ctl" id="a-left">◄ move</button>
+        <button class="ctl" id="a-right">move ►</button>
+        <span style="align-self:center;color:var(--muted);font-size:.8rem;font-family:var(--font-mono)">frets ${st.winStart}–${winEnd()}</span>
+      </div>
+      <div class="board-scroll">${p}</div>
+      <div class="legend">
+        <span><i class="sw sq" style="background:var(--c-root)"></i>root (square)</span>
+        <span><i class="sw" style="background:var(--c-triad)"></i>triad 3rd/5th (circle)</span>
+        <span><i class="sw ring"></i>7th (ring)</span>
+        <span><i class="sw" style="background:var(--c-scale)"></i>other scale tone</span>
+        <span><i class="sw line"></i>arpeggio path</span>
+      </div>`;
+    el.querySelector('#a-win').onclick=()=>{state.showWindow=!state.showWindow;render();};
+    el.querySelector('#a-left').onclick=()=>{st.winStart=Math.max(0,st.winStart-1);render();};
+    el.querySelector('#a-right').onclick=()=>{st.winStart=Math.min(FRETS-4,st.winStart+1);render();};
+  };
+  render(); return el;
+}
+
+// ---- variant B: vertical, scale degrees, color-coded --------------------
+function variantB(){
+  const el=document.createElement('div'); el.className='card';
+  const render=()=>{
+    const L=40,T=42,sg=46,rg=64,R=18,B=16, rows=5;
+    const W=L+5*sg+R, H=T+rows*rg+B;
+    const x=s=>L+s*sg, y=f=>T+(f-st.winStart+0.5)*rg;
+    let p=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:340px;margin:0 auto" role="img" aria-label="Vertical position, scale degrees">`;
+    p+=`<rect x="${L-sg*0.5}" y="${T}" width="${5*sg}" height="${rows*rg}" rx="6" fill="url(#woodv)"/>`;
+    for(let f=st.winStart;f<=winEnd()+1;f++){ const fy=T+(f-st.winStart)*rg;
+      p+=`<line x1="${L-sg*0.5}" y1="${fy}" x2="${L+4.5*sg}" y2="${fy}" stroke="var(--wire)" stroke-width="2"/>`; }
+    for(let f=st.winStart;f<=winEnd();f++) p+=`<text x="${L-sg*0.66}" y="${y(f)+4}" fill="var(--muted)" font-size="11" text-anchor="end">${f}</text>`;
+    for(let s=0;s<6;s++){ p+=`<line x1="${x(s)}" y1="${T}" x2="${x(s)}" y2="${T+rows*rg}" stroke="var(--string)" stroke-width="${1+s*0.3}"/>`;
+      p+=`<text x="${x(s)}" y="${T-10}" fill="var(--muted)" font-size="11" text-anchor="middle">${STR[s]}</text>`; }
+    for(const fr of INLAYS){ if(fr<st.winStart||fr>winEnd())continue; const cy=y(fr);
+      if(fr===12){ p+=`<circle cx="${x(1.5)}" cy="${cy}" r="5" fill="var(--inlay)" opacity=".45"/><circle cx="${x(3.5)}" cy="${cy}" r="5" fill="var(--inlay)" opacity=".45"/>`; }
+      else p+=`<circle cx="${x(2.5)}" cy="${cy}" r="5" fill="var(--inlay)" opacity=".4"/>`; }
+    for(let s=0;s<6;s++)for(let f=st.winStart;f<=winEnd();f++){ const c=cell(s,f); if(!c.inScale)continue;
+      const cx=x(s),cy=y(f);
+      p+=`<circle cx="${cx}" cy="${cy}" r="13" fill="${COLOR[c.role]}"/>`;
+      p+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="12" fill="#fff" font-weight="700">${c.deg}</text>`;
+      if(c.arp){ p+=`<circle cx="${cx+12}" cy="${cy-12}" r="8" fill="var(--c-arp)" stroke="var(--panel)" stroke-width="1.5"/>`;
+        p+=`<text x="${cx+12}" y="${cy-8.5}" text-anchor="middle" font-size="9" fill="#3a2417" font-weight="700">${c.arp}</text>`; } }
+    p+=`<defs><linearGradient id="woodv" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--wood-1)"/><stop offset="1" stop-color="var(--wood-2)"/></linearGradient></defs></svg>`;
+    // minimap of whole neck
+    const mL=8,mT=8,mfg=22,msg=7,mW=mL+FRETS*mfg+8,mH=mT+6*msg+16;
+    let m=`<svg viewBox="0 0 ${mW} ${mH}" width="100%" style="max-width:340px" role="img" aria-label="Whole-neck minimap">`;
+    m+=`<rect x="${mL}" y="${mT}" width="${FRETS*mfg}" height="${6*msg}" fill="var(--wood-1)" rx="3"/>`;
+    m+=`<rect x="${mL+(st.winStart-0.5)*mfg}" y="${mT-2}" width="${5*mfg}" height="${6*msg+4}" fill="var(--accent)" opacity=".28" stroke="var(--accent)" rx="2"/>`;
+    for(let s=0;s<6;s++)for(let f=0;f<=FRETS;f++){ const c=cell(s,f); if(!c.inScale)continue;
+      m+=`<circle cx="${mL+(f-0.5)*mfg+mfg*0.5}" cy="${mT+(5-s)*msg+msg*0.5}" r="2.4" fill="${c.role==='scale'?'var(--c-scale)':COLOR[c.role]}"/>`; }
+    for(let f=0;f<=FRETS;f+=3) m+=`<text x="${mL+(f-0.5)*mfg+mfg*0.5}" y="${mH-3}" font-size="7" fill="var(--muted)" text-anchor="middle">${f}</text>`;
+    m+=`</svg>`;
+    el.innerHTML =
+      `<div class="vhead"><h2>B — Vertical, single position</h2>
+        <p>A blown-up chord-diagram view of one 5-fret box. Scale-<b>degree numbers</b> on tones;
+        content types read by <b>color</b>; the arpeggio shows numbered <b>play order</b>.</p></div>
+      <div class="board-scroll">${p}</div>
+      <div class="minimap">${m}<p class="minimap-hint">Click the minimap to move the position window.</p></div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--c-root)"></i>root</span>
+        <span><i class="sw" style="background:var(--c-triad)"></i>triad (3rd/5th)</span>
+        <span><i class="sw" style="background:var(--c-seventh)"></i>7th</span>
+        <span><i class="sw" style="background:var(--c-scale)"></i>other scale tone</span>
+        <span><i class="sw" style="background:var(--c-arp)"></i>arpeggio order badge</span>
+      </div>`;
+    el.querySelector('.minimap svg').onclick=(e)=>{ const svg=e.currentTarget; const r=svg.getBoundingClientRect();
+      const fx=(e.clientX-r.left)/r.width*mW; const f=Math.round((fx-mL)/mfg);
+      st.winStart=Math.max(0,Math.min(FRETS-4,f-2)); render(); };
+  };
+  render(); return el;
+}
+
+// ---- variant C: horizontal dense, intervals, color+outline+arrows -------
+function variantC(){
+  const el=document.createElement('div'); el.className='card';
+  const IC={root:'var(--c-root)',3:'var(--c-triad)',5:'var(--c-fifth)',7:'var(--c-seventh)'};
+  const ivlColor=c=> c.role==='root'?IC.root : c.pc===4?IC[3] : c.pc===7?IC[5] : c.pc===11?IC[7] : 'var(--c-scale)';
+  const render=()=>{
+    const L=40,T=22,fg=54,sg=38,R=16,B=26;
+    const W=L+FRETS*fg+R, H=T+5*sg+B;
+    const x=f=>L+f*fg, y=s=>T+(5-s)*sg;
+    let p=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Dense horizontal fretboard, intervals">`;
+    p+=`<rect x="${L-fg*0.5}" y="${T-12}" width="${FRETS*fg+fg*0.5}" height="${5*sg+24}" rx="6" fill="url(#woodc)"/>`;
+    p+=`<rect x="${L+(st.winStart-0.5)*fg}" y="${T-12}" width="${5*fg}" height="${5*sg+24}" fill="var(--accent)" opacity=".12"/>`;
+    for(let f=1;f<=FRETS;f++){ const wx=L+(f-0.5)*fg;
+      p+=`<line x1="${wx}" y1="${T-6}" x2="${wx}" y2="${T+5*sg+6}" stroke="var(--wire)" stroke-width="${f===1?4:2}"/>`; }
+    for(let f=0;f<=FRETS;f++) p+=`<text x="${x(f)}" y="${H-8}" fill="var(--muted)" font-size="10" text-anchor="middle">${f}</text>`;
+    for(let s=0;s<6;s++){ p+=`<line x1="${L-fg*0.4}" y1="${y(s)}" x2="${x(FRETS)+12}" y2="${y(s)}" stroke="var(--string)" stroke-width="${1+s*0.3}"/>`;
+      p+=`<text x="${L-fg*0.5}" y="${y(s)+3}" fill="var(--muted)" font-size="10" text-anchor="end">${STR[s]}</text>`; }
+    // arpeggio path with direction arrows
+    p+=`<defs><marker id="arw" markerWidth="7" markerHeight="7" refX="4" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="var(--c-arp)"/></marker>`;
+    p+=`<linearGradient id="woodc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--wood-2)"/><stop offset="1" stop-color="var(--wood-1)"/></linearGradient></defs>`;
+    for(let i=0;i<ARP.length-1;i++){ const [s1,f1]=ARP[i],[s2,f2]=ARP[i+1];
+      p+=`<line x1="${x(f1)}" y1="${y(s1)}" x2="${x(f2)}" y2="${y(s2)}" stroke="var(--c-arp)" stroke-width="2.5" opacity=".9" marker-end="url(#arw)"/>`; }
+    // dots — interval color + outline ring for chord tones
+    for(let s=0;s<6;s++)for(let f=0;f<=FRETS;f++){ const c=cell(s,f); if(!c.inScale)continue;
+      const cx=x(f),cy=y(s), col=ivlColor(c), chord=c.role!=='scale';
+      if(chord){ p+=`<circle cx="${cx}" cy="${cy}" r="12" fill="${col}"/><circle cx="${cx}" cy="${cy}" r="14.5" fill="none" stroke="${col}" stroke-width="1.6" opacity=".55"/>`;
+        p+=`<text x="${cx}" y="${cy+3.5}" text-anchor="middle" font-size="11" fill="#fff" font-weight="700">${c.ivl}</text>`; }
+      else { p+=`<circle cx="${cx}" cy="${cy}" r="9" fill="var(--c-scale)" opacity=".55"/>`;
+        p+=`<text x="${cx}" y="${cy+3}" text-anchor="middle" font-size="9" fill="#3a2417" font-weight="600">${c.ivl}</text>`; } }
+    p+=`</svg>`;
+    el.innerHTML =
+      `<div class="vhead"><h2>C — Dense, interval-coded</h2>
+        <p>Everything at once for the analyst. Labels are <b>intervals</b>; chord tones get a
+        colored fill + outline ring by interval, scale tones fade back, and the arpeggio is a
+        <b>directional path</b>. Controls live in a sidebar.</p></div>
+      <div class="clayout">
+        <div class="cside">
+          <h3>Position</h3>
+          <div class="controls" style="margin:0 0 14px">
+            <button class="ctl" id="c-left">◄</button>
+            <button class="ctl" id="c-right">►</button>
+            <span style="align-self:center;color:var(--muted);font-size:.78rem;font-family:var(--font-mono)">${st.winStart}–${winEnd()}</span>
+          </div>
+          <h3>Interval key</h3>
+          <div class="legend">
+            <span><i class="sw" style="background:var(--c-root)"></i>R — root</span>
+            <span><i class="sw" style="background:var(--c-triad)"></i>3 — third</span>
+            <span><i class="sw" style="background:var(--c-fifth)"></i>5 — fifth</span>
+            <span><i class="sw" style="background:var(--c-seventh)"></i>7 — seventh</span>
+            <span><i class="sw" style="background:var(--c-scale);opacity:.55"></i>other scale tone</span>
+            <span><i class="sw line"></i>arpeggio (arrowed)</span>
+          </div>
+        </div>
+        <div class="board-scroll">${p}</div>
+      </div>`;
+    el.querySelector('#c-left').onclick=()=>{st.winStart=Math.max(0,st.winStart-1);render();};
+    el.querySelector('#c-right').onclick=()=>{st.winStart=Math.min(FRETS-4,st.winStart+1);render();};
+  };
+  render(); return el;
+}
+
+// ---- switcher ----------------------------------------------------------
+const VARIANTS = { A:{name:'Horizontal, whole-neck', build:variantA},
+                   B:{name:'Vertical, single position', build:variantB},
+                   C:{name:'Dense, interval-coded', build:variantC} };
+const KEYS=['A','B','C'];
+function current(){ const v=(new URLSearchParams(location.search).get('variant')||'A').toUpperCase();
+  return KEYS.includes(v)?v:'A'; }
+function show(v){ const u=new URL(location); u.searchParams.set('variant',v); history.replaceState({},'',u);
+  const stage=document.getElementById('stage'); stage.innerHTML='';
+  stage.appendChild(VARIANTS[v].build());
+  document.getElementById('vkey').textContent=v;
+  document.getElementById('vname').textContent=VARIANTS[v].name; }
+function step(d){ const i=(KEYS.indexOf(current())+d+KEYS.length)%KEYS.length; show(KEYS[i]); }
+document.getElementById('prev').onclick=()=>step(-1);
+document.getElementById('next').onclick=()=>step(1);
+addEventListener('keydown',e=>{ const t=e.target.tagName;
+  if(t==='INPUT'||t==='TEXTAREA'||e.target.isContentEditable)return;
+  if(e.key==='ArrowLeft')step(-1); if(e.key==='ArrowRight')step(1); });
+show(current());
+</script>
