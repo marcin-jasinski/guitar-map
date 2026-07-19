@@ -48,11 +48,24 @@ left to decide before implementation starts — this map does not build the webs
   runtime label toggle (names/degrees/intervals, default names), content types by interval
   color + outline with the arpeggio as a directional arrowed path. Prototype:
   [`007-fretboard.html`](tickets/prototypes/007-fretboard.html).
+- [Diatonic triad highlighting UX for scale view](tickets/008-diatonic-triad-highlighting.md) —
+  one triad at a time via a sidebar Roman-numeral degree selector (7-note scales only, hidden
+  for pentatonic/blues); selecting a degree re-keys the existing interval colors to that triad's
+  root; triads only (7ths deferred), passive lens (no overlay/chord-view actions).
+- [Multi-chord overlay UX (max 3 chords)](tickets/009-multi-chord-overlay.md) — comparison-first:
+  Chord view grows "+ Add chord" slots (max 3, independent chords), color switches from interval
+  role to chord identity at 2+ chords, shared notes render as split fill in the contributing
+  chords' colors, labels lock to note names in overlay.
 
 ## Not yet specified
 
 - Modes of harmonic/melodic minor, and richer extended chords (9ths/11ths/13ths) beyond the
   launch set fixed in TICKET-002 — candidates for a post-launch content expansion.
+- Diatonic *seventh* chords on the degree selector (Imaj7 ii7 …) as a triad/7th toggle —
+  natural extension of TICKET-008's selector, deferred to keep the launch highlight legible.
+- A diatonic-triad → multi-chord-overlay bridge ("send this triad to the overlay") — now that
+  TICKET-009's overlay model is fixed (independent slots), this is just a "pre-fill a slot"
+  action from TICKET-008's degree selector; deferred as a post-launch convenience.
 - How many frets are shown in whole-neck view (12 vs full fretboard length) — orientation and
   window behaviour are now settled (TICKET-007); only the whole-neck fret count remains open.
 - Realistic sample-based audio as a post-launch upgrade over the launch Web Audio synthesis
