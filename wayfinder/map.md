@@ -25,14 +25,32 @@ left to decide before implementation starts — this map does not build the webs
 
 ## Decisions so far
 
-- (none yet — map just charted)
+- [Choose tech stack and hosting](tickets/001-tech-stack.md) — Svelte 5 + TS + Vite, SVG
+  fretboard, static host with no backend (all shapes computed client-side).
+- [Define music-theory content scope](tickets/002-content-scope.md) — 12 scales (major, 6
+  modes, both pentatonics, blues, harmonic + melodic minor), triads/7ths/sus/6/add9/shell
+  chords, arpeggios as a separate content type, all 12 roots with key-correct enharmonic
+  spelling.
+- [Define position window size and navigation](tickets/003-position-window.md) — configurable
+  4–6 fret span (default 5), click-a-fret-to-center + arrow nudges, fret 0 as an open-string
+  column, window clamped to [0, lastFret].
+- [Design custom tuning builder UX](tickets/004-custom-tuning-builder.md) — per-string note +
+  octave dropdowns, variable 4–8 strings, soft non-blocking warnings, optional name persisted
+  via favorites; renderer reads string count from the tuning (not hard-coded 6).
+- [Design audio playback feature](tickets/005-audio-playback.md) — Web Audio synthesis at
+  launch (samples deferred), chords strum / scales play ascending / click a note to hear it,
+  true per-tuning pitch (`openStringPitch + fret`).
+- [Design save/favorites persistence](tickets/006-save-favorites.md) — favorites = full view
+  snapshots in localStorage (versioned JSON, ~50 soft cap), custom tunings auto-collected into
+  the picker, auto-generated editable names, list panel with load/rename/delete.
 
 ## Not yet specified
 
-- Exact scope of "most important" content: which scale types (modes, pentatonics,
-  harmonic/melodic minor, etc.) and chord/arpeggio types (triads, 7ths, shell voicings,
-  extended chords) beyond the ones already ticketed for scoping.
+- Modes of harmonic/melodic minor, and richer extended chords (9ths/11ths/13ths) beyond the
+  launch set fixed in TICKET-002 — candidates for a post-launch content expansion.
 - How many frets are shown in whole-neck view (12 vs full fretboard length).
+- Realistic sample-based audio as a post-launch upgrade over the launch Web Audio synthesis
+  (TICKET-005) — needs sample assets + licensing + pitch-shifting.
 - Whether chord/scale results can be exported or shared (link, image, PDF) — not asked
   about yet, may or may not be worth a ticket.
 - Mobile/touch support: explicitly a nice-to-have, not a designed-for requirement — revisit
