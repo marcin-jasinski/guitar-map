@@ -13,10 +13,12 @@
     dots,
     cells,
     barre,
+    ghosts,
     showWindow,
     win,
     onCenter,
     onPlayNote,
+    onPickRoot,
   }: {
     tuning: Tuning;
     dots: Map<number, Dot>;
@@ -24,11 +26,15 @@
     cells: Set<string>;
     /** Set when the shape can be held with one finger across a run of strings. */
     barre: Barre | null;
+    /** Other roots this shape could start from, as cell → anchor index. */
+    ghosts: Map<string, number>;
     /** The window is only meaningful in position mode; elsewhere nothing is emphasised. */
     showWindow: boolean;
     win: FretWindow;
     onCenter: (fret: number) => void;
     onPlayNote: (midi: number) => void;
+    /** Re-anchor the octave view on one of the faint roots. */
+    onPickRoot: (anchor: number) => void;
   } = $props();
 
   const FRET_W = 46;
@@ -133,26 +139,42 @@
     {#each tuning.strings as _, s}
       {#each { length: LAST_FRET + 1 } as _, f}
         {@const midi = fretMidi(tuning, s, f)}
-        {@const dot = cells.has(cellKey(s, f)) ? dots.get(midi % 12) : undefined}
+        {@const key = cellKey(s, f)}
+        {@const played = cells.has(key)}
+        {@const ghost = !played && ghosts.has(key)}
+        {@const dot = played || ghost ? dots.get(midi % 12) : undefined}
         {#if dot}
-          {@const r = dot.faded ? 10 : 13}
+          {@const r = ghost ? 10 : dot.faded ? 10 : 13}
           <g
             role="button" tabindex="0"
-            class="dot" class:faded={dot.faded}
-            aria-label="{dot.name}, {dot.role}, string {s + 1} fret {f}{barred(s, f) ? ', barred' : ''}"
-            onclick={() => onPlayNote(midi)}
-            onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onPlayNote(midi))}
+            class="dot" class:faded={dot.faded && played} class:ghost
+            aria-label={ghost
+              ? `Start the shape from ${dot.name}, string ${s + 1} fret ${f}`
+              : `${dot.name}, ${dot.role}, string ${s + 1} fret ${f}${barred(s, f) ? ', barred' : ''}`}
+            onclick={() => (ghost ? onPickRoot(ghosts.get(key)!) : onPlayNote(midi))}
+            onkeydown={(e) =>
+              (e.key === 'Enter' || e.key === ' ') &&
+              (e.preventDefault(), ghost ? onPickRoot(ghosts.get(key)!) : onPlayNote(midi))}
           >
-            <circle cx={x(f)} cy={y(s)} r={r} fill={dot.colors[0]} />
-            {#if dot.colors.length > 1}
-              {#each dot.colors as color, i}
-                <path d={wedge(x(f), y(s), r, i, dot.colors.length)} fill={color} />
-              {/each}
+            {#if ghost}
+              <!-- Where else this shape could start: present, but never competing
+                   with the notes actually being shown. -->
+              <circle
+                cx={x(f)} cy={y(s)} r={r} fill="var(--panel)"
+                stroke={dot.colors[0]} stroke-width="2" stroke-dasharray="3 2.5"
+              />
+            {:else}
+              <circle cx={x(f)} cy={y(s)} r={r} fill={dot.colors[0]} />
+              {#if dot.colors.length > 1}
+                {#each dot.colors as color, i}
+                  <path d={wedge(x(f), y(s), r, i, dot.colors.length)} fill={color} />
+                {/each}
+              {/if}
+              <circle cx={x(f)} cy={y(s)} r={r + 2.5} fill="none" stroke={dot.colors[0]} stroke-width="1.6" opacity=".5" />
             {/if}
-            <circle cx={x(f)} cy={y(s)} r={r + 2.5} fill="none" stroke={dot.colors[0]} stroke-width="1.6" opacity=".5" />
             <!-- Every dot always carries its text label, so nothing is encoded by colour alone (§1). -->
-            <text x={x(f)} y={y(s) + 3.5} text-anchor="middle" class="lbl">{dot.label}</text>
-            {#if dot.badge}
+            <text x={x(f)} y={y(s) + 3.5} text-anchor="middle" class="lbl" class:ink={ghost}>{dot.label}</text>
+            {#if dot.badge && !ghost}
               <circle cx={x(f) + r} cy={y(s) - r} r="7" fill="var(--panel)" stroke={dot.colors[0]} stroke-width="1.2" />
               <text x={x(f) + r} y={y(s) - r + 3} text-anchor="middle" class="badge">{dot.badge}</text>
             {/if}
@@ -174,8 +196,11 @@
   .fretzone:hover { fill: var(--accent); opacity: 0.07; }
   .dot { cursor: pointer; }
   .dot.faded { opacity: 0.5; }
+  .dot.ghost { opacity: 0.4; }
+  .dot.ghost:hover { opacity: 0.95; }
   .dot:hover { filter: brightness(1.15); }
   .dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .lbl { fill: #fff; font-size: 11px; font-weight: 700; paint-order: stroke; }
+  .lbl.ink { fill: var(--ink); font-size: 10px; }
   .badge { fill: var(--ink); font-size: 8px; font-weight: 700; }
 </style>

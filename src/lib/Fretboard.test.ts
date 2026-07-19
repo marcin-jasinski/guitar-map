@@ -18,9 +18,11 @@ const draw = (content: Content, display: Display, w = win) => {
       tuning, dots, win: w,
       cells: neck.cells,
       barre: neck.barre,
+      ghosts: neck.ghosts,
       showWindow: display.mode === 'position',
       onCenter: () => {},
       onPlayNote: () => {},
+      onPickRoot: () => {},
     },
   }).body;
 };
@@ -43,8 +45,16 @@ test('octave mode draws one compact path, ignoring the window entirely', () => {
   // The path runs frets 8–13 from the root on the low E string: past the
   // 5–9 window at one end, and starting well after it at the other.
   expect(body).toContain('fret 13"');
-  expect(body).not.toContain('fret 5"');
+  // Nothing is drawn at the nut: no scale note there, and no root to ghost.
   expect(body).not.toContain('fret 0"');
+});
+
+test('other roots render as dashed, clickable starting points', () => {
+  const body = draw(scale, { mode: 'octaves', octaves: 2, anchor: 0 });
+  expect(body).toContain('stroke-dasharray="3 2.5"');
+  expect(body).toContain('Start the shape from C, string');
+  // The ghosts are reachable by keyboard, like every other dot.
+  expect(body).toMatch(/class="dot svelte-\w+ ghost"/);
 });
 
 test('a barred chord draws the bar and says so to a screen reader', () => {

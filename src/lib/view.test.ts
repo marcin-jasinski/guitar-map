@@ -245,6 +245,36 @@ describe('octave mode', () => {
     expect(at(scale, display(1, 999)).cells.size).toBeGreaterThan(0);
   });
 
+  test('the other roots are offered as ghosts pointing at their own anchor', () => {
+    const anchors = usableAnchors(standard, scale, noteMap(scale, 'names'), 2);
+    const b = at(scale, display(2, 0));
+
+    expect(b.ghosts.size).toBeGreaterThan(0);
+    for (const [key, index] of b.ghosts) {
+      const [s, f] = key.split(':').map(Number);
+      // Every ghost is a real root, and its index selects that very position.
+      expect(fretMidi(standard, s, f) % 12).toBe(notePc('C'));
+      expect(anchors[index]).toMatchObject({ string: s, fret: f });
+      // Ghosts never sit on a note the path already draws.
+      expect(b.cells.has(key)).toBe(false);
+    }
+    expect(b.ghosts.has(`${anchors[0].string}:${anchors[0].fret}`)).toBe(false);
+  });
+
+  test('clicking a ghost gives exactly the board that anchor would', () => {
+    const b = at(scale, display(2, 0));
+    const [, index] = [...b.ghosts][0];
+    const picked = at(scale, display(2, index));
+    const anchors = usableAnchors(standard, scale, noteMap(scale, 'names'), 2);
+    expect(Math.min(...midis(picked))).toBe(anchors[index].midi);
+    expect([...picked.cells]).not.toEqual([...b.cells]);
+  });
+
+  test('only octave mode has ghosts — nothing else grows stray dots', () => {
+    expect(at(scale, { mode: 'position', octaves: 1, anchor: 0 }).ghosts.size).toBe(0);
+    expect(at(scale, { mode: 'whole', octaves: 1, anchor: 0 }).ghosts.size).toBe(0);
+  });
+
   test('arpeggios get the same treatment, showing only chord tones', () => {
     const b = at(arp, display(2));
     const m = midis(b);

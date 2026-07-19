@@ -116,6 +116,8 @@ export function noteMap(content: Content, mode: LabelMode): Map<number, Dot> {
 
 export const cellKey = (string: number, fret: number) => `${string}:${fret}`;
 
+const NO_GHOSTS: Map<string, number> = new Map();
+
 /** A run of strings stopped at one fret by a single finger. */
 export type Barre = { fret: number; from: number; to: number };
 export type Board = {
@@ -124,6 +126,10 @@ export type Board = {
   /** Chord tones the chosen voicing leaves out — sometimes nothing complete is
    *  reachable in the window, and saying so beats quietly showing a lie. */
   omits: string[];
+  /** Other roots the octave view could start from, as cell → anchor index.
+   *  Drawn faintly: they say "the shape also lives here" without competing
+   *  with the shape you actually asked for. */
+  ghosts: Map<string, number>;
 };
 
 export const contentRoot = (c: Content) => (c.kind === 'chord' ? c.slots[0].root : c.root);
@@ -254,7 +260,7 @@ export function board(
         if (dots.has(fretMidi(tuning, s, f) % 12)) cells.add(cellKey(s, f));
       }
     }
-    return { cells, barre: null, omits: [] };
+    return { cells, barre: null, omits: [], ghosts: NO_GHOSTS };
   }
 
   // A single chord is a shape to hold, so it steps through voicings rather than
@@ -266,9 +272,18 @@ export function board(
 
   if (display.mode === 'octaves') {
     const anchors = usableAnchors(tuning, content, dots, display.octaves);
-    const anchor = anchors[clampIndex(display.anchor, anchors.length)];
-    if (!anchor) return { cells, barre: null, omits: [] };
-    return { cells: octavePath(tuning, dots, anchor, display.octaves), barre: null, omits: [] };
+    const index = clampIndex(display.anchor, anchors.length);
+    const anchor = anchors[index];
+    if (!anchor) return { cells, barre: null, omits: [], ghosts: NO_GHOSTS };
+
+    const path = octavePath(tuning, dots, anchor, display.octaves);
+    const ghosts = new Map<string, number>();
+    anchors.forEach((a, i) => {
+      const key = cellKey(a.string, a.fret);
+      // A root already on the path is drawn for real; no ghost competes with it.
+      if (i !== index && !path.has(key)) ghosts.set(key, i);
+    });
+    return { cells: path, barre: null, omits: [], ghosts };
   }
 
   const hi = Math.min(LAST_FRET, win.startFret + win.width - 1);
@@ -277,7 +292,7 @@ export function board(
       if (dots.has(fretMidi(tuning, s, f) % 12)) cells.add(cellKey(s, f));
     }
   }
-  return { cells, barre: null, omits: [] };
+  return { cells, barre: null, omits: [], ghosts: NO_GHOSTS };
 }
 
 /** Chord tones with no cell sounding them, by name. */
@@ -381,7 +396,7 @@ function voicing(tuning: Tuning, win: FretWindow, dots: Map<number, Dot>, rootPc
   const chosen: { shape: Shape; barre: Barre | null } = best;
   const cells = new Set<string>();
   chosen.shape.forEach((f, s) => f !== null && cells.add(cellKey(s, f)));
-  return { cells, barre: chosen.barre, omits: missing(tuning, cells, dots) };
+  return { cells, barre: chosen.barre, omits: missing(tuning, cells, dots), ghosts: NO_GHOSTS };
 }
 
 /** The hand span a voicing search looks through at one time. */

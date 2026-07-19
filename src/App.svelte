@@ -330,16 +330,18 @@
       {tuning} {dots} {win}
       cells={neck.cells}
       barre={neck.barre}
+      ghosts={neck.ghosts}
       showWindow={display.mode === 'position'}
       onCenter={center}
       onPlayNote={playNote}
+      onPickRoot={(anchor) => (display.anchor = anchor)}
     />
     <p class="hint">
       {#if display.mode === 'whole'}
         Every occurrence across the neck, all read equally. Click a fret to centre a position.
       {:else if display.mode === 'octaves'}
-        {display.octaves} octave{display.octaves > 1 ? 's' : ''} up from {rootLabel}. ← → step to the
-        next root. Click any note to hear it.
+        {display.octaves} octave{display.octaves > 1 ? 's' : ''} up from {rootLabel}. Dashed roots
+        are the other places this shape starts — click one to move there. ← → steps too.
       {:else if oneChord}
         A shape you can hold: root included{neck.barre
           ? `, barred at fret ${neck.barre.fret}`
