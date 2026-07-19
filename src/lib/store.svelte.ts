@@ -21,6 +21,8 @@ export type Favorite = {
   content: Content;
   window: FretWindow;
   labelMode: LabelMode;
+  /** Optional so favorites saved before the toggle existed still load, as "in position". */
+  wholeNeck?: boolean;
 };
 
 export type Store = { version: 1; favorites: Favorite[]; customTunings: Tuning[] };

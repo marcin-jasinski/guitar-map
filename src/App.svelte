@@ -14,14 +14,18 @@
     type Tuning,
   } from './lib/theory';
   import { describeContent, type Content, type Favorite, type LabelMode } from './lib/store.svelte';
-  import { CHORD_COLORS, chordVoicing, effectiveLabelMode, noteMap, scaleRun } from './lib/view';
+  import { CHORD_COLORS, chordVoicing, effectiveLabelMode, noteMap, scaleRun, visibleCells } from './lib/view';
 
   let tuning = $state<Tuning>(structuredClone(PRESET_TUNINGS[0]));
   let content = $state<Content>({ kind: 'scale', root: 'C', scale: 'Major (Ionian)', degree: null });
   let win = $state({ startFret: 5, width: 5 });
   let labelMode = $state<LabelMode>('names');
+  // Default to the position: the whole neck at once is the reference view, not
+  // the working one.
+  let wholeNeck = $state(false);
 
   let dots = $derived(noteMap(content, labelMode));
+  let cells = $derived(visibleCells(tuning, win, content, dots, wholeNeck));
   let activeLabel = $derived(effectiveLabelMode(content, labelMode));
   let triads = $derived(content.kind === 'scale' ? diatonicTriads(content.root, content.scale) : []);
   let root = $derived(content.kind === 'chord' ? content.slots[0].root : content.root);
@@ -63,6 +67,7 @@
     content: structuredClone($state.snapshot(content)),
     window: { ...win },
     labelMode,
+    wholeNeck,
   });
 
   function loadFavorite(f: Favorite) {
@@ -70,6 +75,7 @@
     content = structuredClone($state.snapshot(f.content));
     win = { ...f.window };
     labelMode = f.labelMode;
+    wholeNeck = f.wholeNeck ?? false;
   }
 
   const LABEL_MODES: LabelMode[] = ['names', 'degrees', 'intervals'];
@@ -178,8 +184,12 @@
     </div>
     <div class="seg" role="group" aria-label="Window width">
       {#each [4, 5, 6] as w}
-        <button aria-pressed={win.width === w} onclick={() => setWidth(w)}>{w}</button>
+        <button aria-pressed={win.width === w} onclick={() => setWidth(w)}>{w} frets</button>
       {/each}
+    </div>
+    <div class="seg" role="group" aria-label="How much of the neck to show">
+      <button aria-pressed={!wholeNeck} onclick={() => (wholeNeck = false)}>In position</button>
+      <button aria-pressed={wholeNeck} onclick={() => (wholeNeck = true)}>Whole neck</button>
     </div>
 
     <h3>Labels</h3>
@@ -200,9 +210,15 @@
 
   <section>
     <h2>{describeContent(content)}</h2>
-    <Fretboard {tuning} {dots} {win} onCenter={center} onPlayNote={playNote} />
+    <Fretboard {tuning} {dots} {cells} {win} onCenter={center} onPlayNote={playNote} />
     <p class="hint">
-      Click a fret number or the neck to centre the window; ← → nudge it. Click any note to hear it.
+      {#if wholeNeck}
+        Every occurrence across the neck. Click a fret to centre the window; ← → nudge it.
+      {:else if content.kind === 'chord' && slots.length === 1}
+        One note per string, fingerable as it stands. Click a fret to move the position; ← → nudge it.
+      {:else}
+        Notes in the position. Click a fret to move it; ← → nudge it. Click any note to hear it.
+      {/if}
     </p>
     <ul class="legend">
       {#if slots.length > 1}
@@ -227,8 +243,11 @@
   header h1 { font-size: 1.2rem; margin: 0; letter-spacing: -0.01em; }
   header p { color: var(--muted); font-size: 0.84rem; margin: 2px 0 0; }
 
-  main { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 20px; padding: 16px 24px 60px; align-items: start; }
-  @media (max-width: 780px) { main { grid-template-columns: 1fr; } }
+  /* The neck grows into the space up to 1920; past that the whole page centres
+     rather than stretching. */
+  header, main { max-width: 1920px; margin: 0 auto; }
+  main { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 20px; padding: 16px 24px 60px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
   aside { background: var(--panel); border: 1px solid var(--hair); border-radius: 12px; padding: 14px; }
   section { min-width: 0; }

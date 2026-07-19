@@ -6,17 +6,20 @@
    * Dumb by design: it draws whatever pitch classes `dots` hands it.
    */
   import { LAST_FRET, fretMidi, type FretWindow, type Tuning } from './theory';
-  import type { Dot } from './view';
+  import { cellKey, type Dot } from './view';
 
   let {
     tuning,
     dots,
+    cells,
     win,
     onCenter,
     onPlayNote,
   }: {
     tuning: Tuning;
     dots: Map<number, Dot>;
+    /** Which `(string, fret)` positions get a dot — see `visibleCells`. */
+    cells: Set<string>;
     win: FretWindow;
     onCenter: (fret: number) => void;
     onPlayNote: (midi: number) => void;
@@ -50,7 +53,7 @@
 </script>
 
 <div class="scroll">
-  <svg viewBox="0 0 {width} {height}" style="width:{width}px" role="group" aria-label="Fretboard">
+  <svg viewBox="0 0 {width} {height}" role="group" aria-label="Fretboard">
     <defs>
       <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="var(--wood-2)" />
@@ -110,7 +113,7 @@
     {#each tuning.strings as _, s}
       {#each { length: LAST_FRET + 1 } as _, f}
         {@const midi = fretMidi(tuning, s, f)}
-        {@const dot = dots.get(midi % 12)}
+        {@const dot = cells.has(cellKey(s, f)) ? dots.get(midi % 12) : undefined}
         {#if dot}
           {@const r = dot.faded ? 10 : 13}
           <g
@@ -142,7 +145,9 @@
 
 <style>
   .scroll { overflow-x: auto; padding-bottom: 6px; }
-  svg { display: block; font-family: var(--font-mono); }
+  /* Grows to fill the column; below min-width the neck scrolls rather than
+     shrinking the dots into illegibility. */
+  svg { display: block; width: 100%; min-width: 1040px; font-family: var(--font-mono); }
   .edge, .fretnum { fill: var(--muted); font-size: 11px; }
   .fretnum.on { fill: var(--accent); font-weight: 700; }
   .fretzone { cursor: pointer; }

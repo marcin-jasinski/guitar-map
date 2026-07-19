@@ -6,6 +6,7 @@
 import type { Content, LabelMode } from './store.svelte';
 import {
   CHORDS,
+  LAST_FRET,
   chordNotes,
   diatonicTriads,
   fretMidi,
@@ -108,6 +109,47 @@ export function noteMap(content: Content, mode: LabelMode): Map<number, Dot> {
     });
   }
   return dots;
+}
+
+// ---- which board positions to draw ---------------------------------------------
+
+export const cellKey = (string: number, fret: number) => `${string}:${fret}`;
+
+/**
+ * Which `(string, fret)` cells actually get a dot. `noteMap` decides what a pitch
+ * class *looks* like; this decides *where* it appears, which is what makes the
+ * position window worth having.
+ *
+ * - Whole neck: every occurrence, everywhere — the reference view.
+ * - Window, single chord: **one note per string**, so the shape is a fingering
+ *   rather than a cloud of every chord tone in reach.
+ * - Window, anything else: every occurrence inside the window. Scales and
+ *   arpeggios want the full in-position pattern, and an overlay of 2–3 chords
+ *   is about comparing them, so thinning it to one per string would hide the
+ *   overlaps that are the whole point (§9).
+ */
+export function visibleCells(
+  tuning: Tuning,
+  win: FretWindow,
+  content: Content,
+  dots: Map<number, Dot>,
+  wholeNeck: boolean,
+): Set<string> {
+  const cells = new Set<string>();
+  const lo = wholeNeck ? 0 : win.startFret;
+  const hi = wholeNeck ? LAST_FRET : Math.min(LAST_FRET, win.startFret + win.width - 1);
+  // ponytail: lowest chord tone on each string. Good enough to finger; a real
+  // voicing chooser (root in the bass, minimal stretch) is the upgrade path.
+  const onePerString = !wholeNeck && content.kind === 'chord' && content.slots.length === 1;
+
+  for (let s = 0; s < tuning.strings.length; s++) {
+    for (let f = lo; f <= hi; f++) {
+      if (!dots.has(fretMidi(tuning, s, f) % 12)) continue;
+      cells.add(cellKey(s, f));
+      if (onePerString) break;
+    }
+  }
+  return cells;
 }
 
 // ---- playback note selection (§6) ---------------------------------------------
