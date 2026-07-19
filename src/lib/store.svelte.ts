@@ -78,9 +78,17 @@ export const favoriteName = (f: Omit<Favorite, 'id' | 'name'>) =>
     `frets ${f.window.startFret}–${f.window.startFret + f.window.width - 1}`,
   ].join(' — ');
 
+/**
+ * Everything entering the store gets flattened to plain data here rather than at
+ * each call site. `structuredClone` throws on a `$state` proxy, so a caller that
+ * forgot to snapshot used to fail silently; `$state.snapshot` deep-copies both
+ * proxied and plain values, so callers can hand over whatever they hold.
+ */
+const plain = <T>(value: T): T => $state.snapshot(value) as T;
+
 export function addFavorite(snapshot: Omit<Favorite, 'id' | 'name'>): string | null {
   store.favorites.push({
-    ...structuredClone(snapshot),
+    ...plain(snapshot),
     id: crypto.randomUUID(),
     name: favoriteName(snapshot),
   });
@@ -98,10 +106,21 @@ const key = (t: Tuning) => JSON.stringify(t.strings);
  * Collect a custom tuning into the persisted picker list. Called on an explicit
  * save and when a favorite is saved — not on every edit, since §5 keeps
  * unsaved custom tunings session-only.
+ *
+ * Returns false when the strings are already a built-in preset and nothing was
+ * stored, so the caller can say as much instead of leaving a Save button that
+ * looks broken.
  */
-export function collectTuning(t: Tuning) {
-  const known = [...PRESET_TUNINGS, ...store.customTunings];
-  if (!known.some((x) => key(x) === key(t))) {
-    store.customTunings.push({ ...structuredClone(t), name: t.name || autoLabel(t) });
+export function collectTuning(t: Tuning): boolean {
+  const named = { ...plain(t), name: t.name || autoLabel(t) };
+
+  const existing = store.customTunings.find((x) => key(x) === key(named));
+  if (existing) {
+    existing.name = named.name; // saving the same strings again is how you rename
+    return true;
   }
+  if (PRESET_TUNINGS.some((x) => key(x) === key(named))) return false;
+
+  store.customTunings.push(named);
+  return true;
 }

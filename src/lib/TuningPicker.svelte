@@ -15,6 +15,7 @@
   let { tuning = $bindable() }: { tuning: Tuning } = $props();
 
   let name = $state('');
+  let saved = $state('');
   let all = $derived([...PRESET_TUNINGS, ...store.customTunings]);
   let warnings = $derived(tuningWarnings(tuning));
   let label = $derived(tuning.name || autoLabel(tuning));
@@ -23,7 +24,10 @@
   // The number still counts up from the lowest string, matching the fretboard.
   let rows = $derived(tuning.strings.map((pitch, index) => ({ pitch, index })).reverse());
 
-  const set = (strings: Pitch[]) => (tuning = { name: undefined, strings });
+  const set = (strings: Pitch[]) => {
+    saved = '';
+    tuning = { name: undefined, strings };
+  };
 
   function edit(i: number, patch: Partial<Pitch>) {
     set(tuning.strings.map((p, k) => (k === i ? { ...p, ...patch } : p)));
@@ -36,10 +40,13 @@
   }
 
   function save() {
-    const named = { ...tuning, name: name.trim() || autoLabel(tuning) };
-    collectTuning(named);
+    const named = { ...$state.snapshot(tuning), name: name.trim() || autoLabel(tuning) };
+    const stored = collectTuning(named);
     tuning = named;
     name = '';
+    saved = stored
+      ? `Saved as “${named.name}” — it is in the tuning list now.`
+      : 'Those strings are already a built-in tuning, so nothing was added.';
   }
 </script>
 
@@ -108,6 +115,7 @@
     <input bind:value={name} placeholder={autoLabel(tuning)} aria-label="Tuning name" />
     <button onclick={save}>Save tuning</button>
   </div>
+  {#if saved}<p class="saved" role="status">{saved}</p>{/if}
 </details>
 
 <style>
@@ -127,5 +135,6 @@
     letter-spacing: 0.06em;
   }
   .note { color: var(--muted); font-size: 0.72rem; margin: 8px 0 0; line-height: 1.35; }
+  .saved { color: var(--c-triad); font-size: 0.72rem; margin: 8px 0 0; line-height: 1.35; }
   input { flex: 1; min-width: 0; }
 </style>
