@@ -2,7 +2,7 @@
 
 No external tracker is wired up for this repo, so wayfinder falls back to plain markdown files here.
 
-- The map lives at `wayfinder/map.md`.
+- Maps live at `wayfinder/map.md` (MAP-001) and `wayfinder/map-NNN.md` for every map after it.
 - Each ticket is a file under `wayfinder/tickets/NNN-slug.md` with frontmatter:
   ```yaml
   id: TICKET-NNN
@@ -11,7 +11,10 @@ No external tracker is wired up for this repo, so wayfinder falls back to plain 
   status: open | closed
   assignee: null | <name>
   blocked_by: [TICKET-NNN, ...]
+  map: MAP-NNN
   ```
+  Ticket numbers are unique across all maps; `map:` says which map owns the ticket.
+- `wayfinder/backlog.md` holds standalone briefs — decided work with no fog, owned by no map.
 - **Claim** a ticket by setting `assignee`.
 - **Blocking**: a ticket is unblocked when every id in `blocked_by` points at a ticket with `status: closed`.
 - **Frontier query**: tickets with `status: open`, `assignee: null`, and all `blocked_by` entries closed.

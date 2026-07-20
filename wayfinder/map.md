@@ -2,7 +2,7 @@
 id: MAP-001
 title: Guitar scale/chord/tuning finder — spec
 label: wayfinder:map
-status: open
+status: closed
 ---
 
 ## Destination
