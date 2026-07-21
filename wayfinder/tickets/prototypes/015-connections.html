@@ -1,0 +1,379 @@
+<!--
+  PROTOTYPE — throwaway. TICKET-015 Guide-tone lines and held common tones.
+  Builds on the TICKET-013 layout (variant D: rail, whole neck, forward-looking).
+
+  Unlike the 013 mock, the guide-tone path here is REAL: candidate voicings are
+  generated per chord and chained by TICKET-014's rule — minimise guide-voice
+  fret movement, tie-break on hand travel — so the line is the one the spec will
+  actually draw.
+
+  Three connection treatments (?variant=LINE|MARKS|STRIP, ← →), and every layer
+  is individually toggleable to answer "what survives with everything on".
+  Not production code.
+-->
+<title>Connection rendering prototype — TICKET-015</title>
+<style>
+  :root {
+    --bg:#edeae3; --panel:#ffffff; --ink:#26221c; --muted:#736c60;
+    --hair:#d8d3c8; --accent:#c08a2d; --accent-ink:#ffffff; --warn:#b3541e;
+    --c-root:#e5484d; --c-triad:#30a46c; --c-fifth:#4c8dff; --c-seventh:#a86ddf;
+    --c-ext:#0f7d8c; --c-scale:#a8916a;
+    --wood-1:#3a2417; --wood-2:#4a2f1d; --wire:#b9b4a7; --string:#d8d2c4; --inlay:#ece6da;
+    --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16130f; --panel:#1e1a15; --ink:#ece7dd; --muted:#9a9184; --hair:#322c24; --warn:#f0954a; }
+  }
+  :root[data-theme="light"]{ --bg:#edeae3; --panel:#fff; --ink:#26221c; --muted:#736c60; --hair:#d8d3c8; --warn:#b3541e; }
+  :root[data-theme="dark"] { --bg:#16130f; --panel:#1e1a15; --ink:#ece7dd; --muted:#9a9184; --hair:#322c24; --warn:#f0954a; }
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-ui);
+         line-height:1.5; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1280px; margin:0 auto; padding:24px 20px 120px; }
+  header.h { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 14px; }
+  header.h h1 { font-size:1.15rem; font-weight:650; margin:0; letter-spacing:-.01em; }
+  header.h .sub { color:var(--muted); font-size:.86rem; }
+  .vtag { font-family:var(--font-mono); font-size:.74rem; color:var(--accent);
+          border:1px solid var(--accent); border-radius:999px; padding:1px 8px; }
+
+  .card { background:var(--panel); border:1px solid var(--hair); border-radius:12px;
+          padding:16px; margin-top:16px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .vhead { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin-bottom:12px; }
+  .vhead h2 { font-size:1rem; margin:0; font-weight:640; }
+  .vhead p { margin:0; color:var(--muted); font-size:.84rem; flex:1 1 300px; }
+
+  h3 { font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:14px 0 6px; }
+  button.ctl, select { font:inherit; font-size:.82rem; color:var(--ink); background:transparent;
+    border:1px solid var(--hair); border-radius:8px; padding:5px 11px; cursor:pointer; }
+  button.ctl[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  button.ctl:hover { border-color:var(--accent); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .muted { color:var(--muted); font-size:.78rem; }
+  .mono { font-family:var(--font-mono); }
+
+  .railcol { display:grid; grid-template-columns:220px minmax(0,1fr); gap:18px; align-items:start; }
+  @media (max-width:900px){ .railcol{ grid-template-columns:1fr; } }
+  .strip { display:flex; flex-direction:column; gap:6px; }
+  .chip { text-align:left; font:inherit; cursor:pointer; padding:8px 10px; background:transparent;
+    border:1px solid var(--hair); border-radius:10px; color:var(--ink); }
+  .chip:hover { border-color:var(--accent); }
+  .chip .num { font-family:var(--font-mono); font-size:.95rem; font-weight:700; display:block; }
+  .chip .sym { font-size:.78rem; color:var(--muted); display:block; }
+  .chip .fn { font-size:.7rem; color:var(--warn); display:block; margin-top:2px; line-height:1.25; }
+  .chip[aria-current="true"] { border-color:var(--accent); border-width:2px; padding:7px 9px;
+    background:color-mix(in srgb, var(--accent) 12%, transparent); }
+  .chip[aria-current="true"] .sym { color:inherit; }
+
+  .parent { font-family:var(--font-mono); font-size:1.05rem; font-weight:650; }
+  .swap { font-size:.82rem; margin:4px 0 0; }
+  .swap b { color:var(--warn); font-family:var(--font-mono); }
+  .fnlabel { font-size:.78rem; color:var(--warn); font-weight:600; }
+
+  .board-scroll { overflow-x:auto; padding-bottom:4px; }
+  svg { display:block; }
+  svg text { font-family:var(--font-mono); }
+
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:12px; font-size:.78rem; color:var(--muted); }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .sw { width:13px; height:13px; border-radius:50%; flex:none; }
+  .sw.ring { background:transparent; border:2.5px solid var(--warn); }
+  .sw.ghost { background:transparent; border:2px dashed var(--muted); }
+  .sw.line { width:20px; height:0; border-radius:0; border-top:3px solid var(--accent); }
+  .sw.hold { background:var(--c-triad); box-shadow:inset 0 0 0 2px var(--panel), inset 0 0 0 4px var(--c-triad); }
+
+  .bar { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:50;
+    display:flex; align-items:center; gap:4px; background:var(--panel); border:1px solid var(--hair);
+    border-radius:999px; padding:6px 8px; box-shadow:0 6px 24px rgba(0,0,0,.18); }
+  .bar button { font:inherit; border:none; background:transparent; color:var(--ink); cursor:pointer;
+    width:34px; height:34px; border-radius:50%; font-size:1.1rem; }
+  .bar button:hover { background:var(--hair); }
+  .bar .lbl { font-size:.82rem; padding:0 10px; min-width:210px; text-align:center; font-family:var(--font-mono); }
+  .bar .lbl b { color:var(--accent); }
+</style>
+
+<div class="wrap">
+  <header class="h">
+    <h1>Guide tones &amp; common tones — rendering study</h1>
+    <span class="vtag">TICKET-015 · prototype</span>
+    <span class="sub">key of C · Imaj7 – iv – V7/V – V7 · voicings chained by TICKET-014's rule</span>
+  </header>
+  <div id="stage"></div>
+</div>
+
+<nav class="bar" aria-label="Variant switcher">
+  <button id="prev" title="Previous (←)">‹</button>
+  <span class="lbl"><b id="vkey"></b> — <span id="vname"></span></span>
+  <button id="next" title="Next (→)">›</button>
+</nav>
+
+<script>
+// ---- model --------------------------------------------------------------
+const NAMES = ['C','D♭','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
+const OPEN = [4,9,2,7,11,4], STR = ['E','A','D','G','B','e'];
+const FRETS = 15, INLAYS = [3,5,7,9,12,15];
+const PARENT = { name:'C Ionian', pcs:[0,2,4,5,7,9,11] };
+const ROLE = { 0:'root', 3:'triad', 4:'triad', 7:'fifth', 8:'fifth', 10:'seventh', 11:'seventh' };
+const COLOR = { root:'var(--c-root)', triad:'var(--c-triad)', fifth:'var(--c-fifth)',
+                seventh:'var(--c-seventh)', other:'var(--c-ext)' };
+
+const PROG = [
+  { num:'Imaj7', sym:'Cmaj7', root:0, pcs:[0,4,7,11], fn:null, swaps:[] },
+  { num:'iv',    sym:'Fm',    root:5, pcs:[5,8,0],    fn:'borrowed from C minor', swaps:[{play:8,instead:9,ivl:'♭6'}] },
+  { num:'V7/V',  sym:'D7',    root:2, pcs:[2,6,9,0],  fn:'secondary dominant of V', swaps:[{play:6,instead:5,ivl:'♯4'}] },
+  { num:'V7',    sym:'G7',    root:7, pcs:[7,11,2,5], fn:null, swaps:[] },
+];
+
+const st = { i:0, scale:true, chord:true, ghost:true, guide:true, common:true };
+const cur = () => PROG[st.i];
+const nxt = () => PROG[(st.i+1) % PROG.length];
+const pcAt = (s,f) => (OPEN[s]+f) % 12;
+const roleOf = (pc,root) => ROLE[(pc-root+12)%12] || 'other';
+
+// ---- voicings, chained by TICKET-014's rule -----------------------------
+// Candidates: for each 5-fret window, the lowest chord tone on each string.
+// Kept only if the window covers every chord tone. Deduped — a stand-in for
+// view.ts chordVoicings(), close enough that the line is honest.
+function candidates(c){
+  const seen = new Set(), out = [];
+  for(let start=0; start+4<=FRETS; start++){
+    const shape = [];
+    for(let s=0;s<6;s++){
+      let hit = null;
+      for(let f=start; f<=start+4; f++) if(c.pcs.includes(pcAt(s,f))) { hit=f; break; }
+      shape.push(hit);
+    }
+    const covered = new Set(shape.map((f,s)=> f===null?null:pcAt(s,f)).filter(x=>x!==null));
+    if(c.pcs.some(pc=>!covered.has(pc))) continue;
+    const key = shape.join(',');
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push({ shape, hand: Math.min(...shape.filter(f=>f!==null)) });
+  }
+  return out;
+}
+// The two voices the line draws: the 3rd, and the 7th (5th standing in for a triad).
+function voicesOf(c, v){
+  const iv = pc => (pc - c.root + 12) % 12;
+  const third = c.pcs.find(pc => iv(pc)===3 || iv(pc)===4);
+  const upper = c.pcs.find(pc => iv(pc)===10 || iv(pc)===11) ?? c.pcs.find(pc => iv(pc)===7);
+  const findHi = pc => { for(let s=5;s>=0;s--) if(v.shape[s]!==null && pcAt(s,v.shape[s])===pc) return {s, f:v.shape[s], pc}; return null; };
+  return [findHi(third), findHi(upper)];
+}
+const cost = (a,b) => {
+  const av = a.voices, bv = b.voices;
+  const move = Math.abs(bv[0].f-av[0].f) + Math.abs(bv[1].f-av[1].f);
+  return move + 0.3*Math.abs(b.hand-a.hand);
+};
+// Viterbi over the chain — TICKET-014's global pass, at prototype scale.
+const CHAIN = (() => {
+  const cols = PROG.map(c => candidates(c).map(v => ({...v, voices: voicesOf(c, v)}))
+                                          .filter(v => v.voices.every(Boolean)));
+  let prevRow = cols[0].map(v => ({ v, total:0, back:null }));
+  const rows = [prevRow];
+  for(let i=1;i<cols.length;i++){
+    const row = cols[i].map(v => {
+      let best = null;
+      for(const p of prevRow){ const t = p.total + cost(p.v, v);
+        if(!best || t < best.total) best = { v, total:t, back:p }; }
+      return best;
+    });
+    rows.push(row); prevRow = row;
+  }
+  let end = prevRow.reduce((a,b)=> b.total < a.total ? b : a);
+  const out = []; for(let n=end; n; n=n.back) out.unshift(n.v);
+  return out;
+})();
+const guideAt = i => CHAIN[i].voices;
+
+// pitch classes held from the current chord into the next
+const commonPcs = () => cur().pcs.filter(pc => nxt().pcs.includes(pc));
+
+// ---- neck ---------------------------------------------------------------
+function neck(variant){
+  const c = cur(), g = nxt(), held = st.common ? commonPcs() : [];
+  const L=42,T=24,fg=52,sg=38,R=16,B=26, W=L+FRETS*fg+R, H=T+5*sg+B;
+  const x=f=>L+f*fg, y=s=>T+(5-s)*sg;
+  let p=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Neck showing ${c.sym}">`;
+  p+=`<defs><linearGradient id="wd" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="var(--wood-2)"/><stop offset="1" stop-color="var(--wood-1)"/></linearGradient>
+    <marker id="ar" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 z" fill="var(--accent)"/></marker></defs>`;
+  p+=`<rect x="${L-fg*.5}" y="${T-13}" width="${FRETS*fg+fg*.5}" height="${5*sg+26}" rx="6" fill="url(#wd)"/>`;
+  for(const fr of INLAYS){ const cx=x(fr), cy=T+2.5*sg;
+    if(fr===12) p+=`<circle cx="${cx}" cy="${cy-sg}" r="5" fill="var(--inlay)" opacity=".45"/><circle cx="${cx}" cy="${cy+sg}" r="5" fill="var(--inlay)" opacity=".45"/>`;
+    else p+=`<circle cx="${cx}" cy="${cy}" r="5" fill="var(--inlay)" opacity=".4"/>`; }
+  for(let f=1;f<=FRETS;f++){ const wx=L+(f-.5)*fg;
+    p+=`<line x1="${wx}" y1="${T-6}" x2="${wx}" y2="${T+5*sg+6}" stroke="var(--wire)" stroke-width="${f===1?4:2}"/>`; }
+  for(let f=0;f<=FRETS;f++) p+=`<text x="${x(f)}" y="${H-8}" fill="var(--muted)" font-size="10" text-anchor="middle">${f}</text>`;
+  for(let s=0;s<6;s++){ p+=`<line x1="${L-fg*.4}" y1="${y(s)}" x2="${x(FRETS)+12}" y2="${y(s)}" stroke="var(--string)" stroke-width="${1+s*.3}"/>`;
+    p+=`<text x="${L-fg*.55}" y="${y(s)+3}" fill="var(--muted)" font-size="10" text-anchor="end">${STR[s]}</text>`; }
+
+  // --- connection layer, under the dots ---
+  const gc = guideAt(st.i), gn = guideAt((st.i+1) % PROG.length);
+  if(st.guide && variant === 'LINE'){
+    for(let v=0;v<2;v++)
+      p+=`<line x1="${x(gc[v].f)}" y1="${y(gc[v].s)}" x2="${x(gn[v].f)}" y2="${y(gn[v].s)}"
+           stroke="var(--accent)" stroke-width="3.5" opacity=".9" marker-end="url(#ar)" stroke-linecap="round"/>`;
+  }
+  if(st.guide && variant === 'MARKS'){
+    for(let v=0;v<2;v++){
+      const a=gc[v], b=gn[v], d = b.f - a.f;
+      p+=`<circle cx="${x(a.f)}" cy="${y(a.s)}" r="18" fill="none" stroke="var(--accent)" stroke-width="3"/>`;
+      p+=`<text x="${x(a.f)}" y="${y(a.s)-22}" text-anchor="middle" font-size="10" fill="var(--accent)" font-weight="700">${
+        d===0?'hold':(d>0?'+':'')+d}</text>`;
+    }
+  }
+
+  // --- dots ---
+  for(let s=0;s<6;s++)for(let f=0;f<=FRETS;f++){
+    const pc=pcAt(s,f), cx=x(f), cy=y(s);
+    const isChord = c.pcs.includes(pc), swap = c.swaps.find(w=>w.play===pc);
+    const isGuide = st.guide && gc.some(v => v.s===s && v.f===f);
+    const wasNext = st.ghost && !isChord && g.pcs.includes(pc);
+    const isScale = PARENT.pcs.includes(pc) && !c.swaps.some(w=>w.instead===pc);
+
+    if(isChord && st.chord){
+      const col = COLOR[roleOf(pc,c.root)];
+      p+=`<circle cx="${cx}" cy="${cy}" r="12.5" fill="${col}"/>`;
+      // held into the next chord: a ring cut into the dot — shape, not colour
+      if(held.includes(pc)) p+=`<circle cx="${cx}" cy="${cy}" r="8.5" fill="none" stroke="var(--panel)" stroke-width="2"/>`;
+      if(swap) p+=`<circle cx="${cx}" cy="${cy}" r="16" fill="none" stroke="var(--warn)" stroke-width="2.5"/>`;
+      if(isGuide && variant==='LINE') p+=`<circle cx="${cx}" cy="${cy}" r="15" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
+      p+=`<text x="${cx}" y="${cy+3.6}" text-anchor="middle" font-size="10.5" fill="#fff" font-weight="700">${NAMES[pc]}</text>`;
+    } else if(wasNext){
+      p+=`<circle cx="${cx}" cy="${cy}" r="11" fill="none" stroke="var(--muted)" stroke-width="2" stroke-dasharray="3 3" opacity=".85"/>`;
+    } else if(st.scale && isScale){
+      p+=`<circle cx="${cx}" cy="${cy}" r="8" fill="var(--c-scale)" opacity=".62"/>`;
+      p+=`<text x="${cx}" y="${cy+3}" text-anchor="middle" font-size="8.5" fill="#3a2417" font-weight="600">${NAMES[pc]}</text>`;
+    }
+  }
+  return p+`</svg>`;
+}
+
+// ---- the separate voice-leading strip (variant STRIP) -------------------
+function voiceStrip(){
+  const colW=150, L=70, T=26, rowH=44, W=L+PROG.length*colW, H=T+2*rowH+26;
+  let p=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px" role="img" aria-label="Guide-tone voice leading">`;
+  p+=`<rect x="0" y="0" width="${W}" height="${H}" rx="8" fill="transparent"/>`;
+  PROG.forEach((c,i)=>{
+    p+=`<text x="${L+i*colW}" y="${16}" text-anchor="middle" font-size="11"
+        fill="${i===st.i?'var(--accent)':'var(--muted)'}" font-weight="${i===st.i?700:400}">${c.sym}</text>`;
+  });
+  ['7th / upper','3rd'].forEach((lbl,r)=>
+    p+=`<text x="${L-16}" y="${T+r*rowH+4}" text-anchor="end" font-size="10" fill="var(--muted)">${lbl}</text>`);
+  for(let v=0;v<2;v++){
+    const r = v===0 ? 1 : 0;   // 3rd on the lower row
+    const pts = PROG.map((_,i)=>`${L+i*colW},${T+r*rowH}`).join(' ');
+    p+=`<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" opacity=".5"/>`;
+    PROG.forEach((c,i)=>{
+      const g = guideAt(i)[v], cx=L+i*colW, cy=T+r*rowH, on = i===st.i;
+      p+=`<circle cx="${cx}" cy="${cy}" r="15" fill="${on?'var(--accent)':'var(--panel)'}"
+          stroke="var(--accent)" stroke-width="2"/>`;
+      p+=`<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" font-weight="700"
+          fill="${on?'var(--accent-ink)':'var(--ink)'}">${NAMES[g.pc]}</text>`;
+      p+=`<text x="${cx}" y="${cy+28}" text-anchor="middle" font-size="9" fill="var(--muted)">str ${6-g.s} · fr ${g.f}</text>`;
+    });
+  }
+  return p+`</svg>`;
+}
+
+// ---- shell --------------------------------------------------------------
+const toggles = () => {
+  const T = [['scale','parent scale'],['chord','chord tones'],['ghost','next-chord ghosts'],
+             ['guide','guide tones'],['common','common tones']];
+  return `<div class="controls">${T.map(([k,l])=>
+    `<button class="ctl" data-t="${k}" aria-pressed="${st[k]}">${l}</button>`).join('')}
+    <button class="ctl" data-preset="solo">soloing preset</button>
+    <button class="ctl" data-preset="all">everything on</button></div>`;
+};
+
+const VARIANTS = {
+  LINE:  { name:'Arrowed line across the neck' },
+  MARKS: { name:'Per-chord rings with movement' },
+  STRIP: { name:'Neck stays clean, strip below' },
+};
+
+function build(v){
+  const c = cur();
+  const swaps = c.swaps.map(w=>`<p class="swap">over ${c.sym}, play <b>${NAMES[w.play]}</b> instead of ${NAMES[w.instead]} <span class="muted">(${w.ivl})</span></p>`).join('');
+  const held = commonPcs().map(pc=>NAMES[pc]).join(', ');
+  const blurb = {
+    LINE:'Two arrowed lines run from this chord\'s guide tones to the next chord\'s, straight across the neck. Most direct, and the most ink.',
+    MARKS:'No line. Each guide tone is ringed where it sits, labelled with how far it moves (<i>hold</i>, <i>-1</i>, <i>+2</i>). The neck stays readable; the connection is stated, not drawn.',
+    STRIP:'The neck carries no connection layer at all. Guide tones move to a small two-voice strip below it, read left to right like a chart.',
+  }[v];
+  return `<div class="card">
+    <div class="vhead"><h2>${v} — ${VARIANTS[v].name}</h2><p>${blurb}</p></div>
+    <div class="railcol">
+      <div><div class="strip">${PROG.map((c,i)=>`
+        <button class="chip" data-i="${i}" aria-current="${i===st.i}">
+          <span class="num">${c.num}</span><span class="sym">${c.sym}</span>
+          ${c.fn?`<span class="fn">${c.fn}</span>`:''}
+        </button>`).join('')}</div>
+        <h3>Layers</h3>${toggles()}
+      </div>
+      <div>
+        <div class="controls" style="margin-bottom:8px">
+          <span class="parent">${PARENT.name}</span>
+          <span class="muted">voicing ${CHAIN[st.i].shape.map(f=>f===null?'x':f).join('-')} · auto</span>
+        </div>
+        <div class="board-scroll">${neck(v)}</div>
+        ${v==='STRIP' ? `<h3>Guide tones</h3><div class="board-scroll">${voiceStrip()}</div>` : ''}
+        <div style="margin-top:10px">
+          ${c.fn?`<div class="fnlabel">${c.sym} — ${c.fn}</div>`:`<div class="muted">${c.sym} — diatonic</div>`}
+          ${swaps}
+          <p class="muted">Held into ${nxt().sym}: ${held || 'nothing'}.</p>
+        </div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--c-root)"></i>root</span>
+          <span><i class="sw" style="background:var(--c-triad)"></i>3rd</span>
+          <span><i class="sw" style="background:var(--c-fifth)"></i>5th</span>
+          <span><i class="sw" style="background:var(--c-seventh)"></i>7th</span>
+          <span><i class="sw" style="background:var(--c-scale);opacity:.62"></i>parent scale</span>
+          <span><i class="sw ring"></i>exception</span>
+          <span><i class="sw ghost"></i>next chord</span>
+          <span><i class="sw hold"></i>held into next</span>
+          ${v!=='STRIP'?'<span><i class="sw line"></i>guide tone</span>':''}
+        </div>
+        <p class="muted">↑ ↓ or click a chord to step · ← → switches treatment</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+const KEYS = Object.keys(VARIANTS);
+const current = () => { const v=(new URLSearchParams(location.search).get('variant')||'LINE').toUpperCase();
+  return KEYS.includes(v)?v:'LINE'; };
+function render(){
+  const v = current();
+  const u = new URL(location); u.searchParams.set('variant', v); history.replaceState({},'',u);
+  const stage = document.getElementById('stage');
+  stage.innerHTML = build(v);
+  document.getElementById('vkey').textContent = v;
+  document.getElementById('vname').textContent = VARIANTS[v].name;
+  stage.querySelectorAll('.chip[data-i]').forEach(b => b.onclick = () => { st.i = +b.dataset.i; render(); });
+  stage.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { st[b.dataset.t] = !st[b.dataset.t]; render(); });
+  stage.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
+    const on = b.dataset.preset === 'all';
+    Object.assign(st, { scale:on?true:false, chord:true, ghost:on, guide:true, common:true });
+    render();
+  });
+}
+function swap(d){ const u=new URL(location);
+  u.searchParams.set('variant', KEYS[(KEYS.indexOf(current())+d+KEYS.length)%KEYS.length]);
+  history.replaceState({},'',u); render(); }
+document.getElementById('prev').onclick=()=>swap(-1);
+document.getElementById('next').onclick=()=>swap(1);
+addEventListener('keydown', e => {
+  if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+  if(e.key==='ArrowLeft') swap(-1);
+  if(e.key==='ArrowRight') swap(1);
+  if(e.key==='ArrowUp'){ e.preventDefault(); st.i=(st.i-1+PROG.length)%PROG.length; render(); }
+  if(e.key==='ArrowDown'){ e.preventDefault(); st.i=(st.i+1)%PROG.length; render(); }
+});
+render();
+</script>
