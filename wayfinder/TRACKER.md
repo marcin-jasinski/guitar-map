@@ -13,8 +13,12 @@ No external tracker is wired up for this repo, so wayfinder falls back to plain 
   blocked_by: [TICKET-NNN, ...]
   map: MAP-NNN
   ```
-  Ticket numbers are unique across all maps; `map:` says which map owns the ticket.
+  Ticket numbers are unique across all maps; `map:` says which map owns the ticket, or `null`
+  where no map does — a promoted backlog brief has no map, only work.
 - `wayfinder/backlog.md` holds standalone briefs — decided work with no fog, owned by no map.
+  A brief is **promoted** to a ticket when it should appear in the frontier query: move its
+  content into `tickets/NNN-slug.md` with `map: null`, and leave a one-line pointer behind so the
+  brief's number keeps resolving.
 - **Claim** a ticket by setting `assignee`.
 - **Blocking**: a ticket is unblocked when every id in `blocked_by` points at a ticket with `status: closed`.
 - **Frontier query**: tickets with `status: open`, `assignee: null`, and all `blocked_by` entries closed.

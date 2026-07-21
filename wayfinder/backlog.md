@@ -6,21 +6,8 @@ hand one of these to an implementation agent as-is. Ruled out of scope of
 
 ## B1 — Tone.js sample-based guitar tone
 
-Replace the triangle-oscillator pluck in [`src/lib/audio.ts`](../src/lib/audio.ts) with
-Tone.js so notes sound like a guitar rather than a synth. `Tone.Sampler` pitch-shifts a
-handful of recorded notes across the whole range, which is what makes this cheap — a few
-samples per few octaves, not one per fret.
-
-Constraints:
-
-- Keep the module's exports (`playNote`, `strum`, `playSequence`) unchanged — every caller
-  goes through them, so the swap is confined to one file.
-- Pitches are true per-tuning MIDI numbers already; the sampler must honour them.
-- Samples need a license that permits redistribution, and they ship as static assets on a
-  no-backend static host — mind the total download size and load them lazily on first sound.
-- Audio context still may only start on a user gesture.
-
-Open when picking it up: which sample set, and whether the load delay needs a UI affordance.
+**Promoted to [TICKET-028](tickets/028-tonejs-guitar-tone.md)** so it shows up in the frontier
+query. The brief's constraints moved there in full; nothing lives here any more.
 
 ## B2 — Download the current neck diagram
 
