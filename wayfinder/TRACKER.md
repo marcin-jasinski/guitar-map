@@ -18,4 +18,7 @@ No external tracker is wired up for this repo, so wayfinder falls back to plain 
 - **Claim** a ticket by setting `assignee`.
 - **Blocking**: a ticket is unblocked when every id in `blocked_by` points at a ticket with `status: closed`.
 - **Frontier query**: tickets with `status: open`, `assignee: null`, and all `blocked_by` entries closed.
+  A **closed map can still own open tickets**: a map closes when its destination is reached, and
+  for a spec map the destination is the spec, not the build. The query is over tickets and ignores
+  the owning map's status, so nothing is lost — MAP-002 is the worked example.
 - **Resolving** a ticket: append a `## Resolution` section to its file, set `status: closed`, then add a one-line pointer under the map's `## Decisions so far`.

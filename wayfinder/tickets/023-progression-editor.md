@@ -24,8 +24,13 @@ An unsupported suffix (`C13`, `G7♯9`, `Fm6/9`) raises a **soft, non-blocking w
 is supported, and stores nothing — which keeps the invariant everything downstream depends on:
 every chord in a progression has real notes.
 
-Nothing is invalid. Empty and single-chord progressions are legal; the only cap is 32 chords, so
-the rail stays usable. No bass note, no duration.
+Nothing is invalid. Empty and single-chord progressions are legal (§4.6 says what they draw); the
+only cap is 32 chords, so the rail stays usable. No bass note, no duration.
+
+**A pin travels with its chord.** TICKET-024's override lives on the `Chord` as `pin?`, not in a
+side table keyed by index, so reorder and remove need no remapping and cannot mis-assign a pin to
+a neighbour — moving the object moves the pin. Editing a chord's degree or quality clears that
+chord's `pin` and nothing else.
 
 ## Acceptance criteria
 
@@ -33,7 +38,8 @@ the rail stays usable. No bass note, no duration.
 - [ ] Edit a chord's degree, alter, quality and `of` target
 - [ ] Typing a chord symbol back-analyses to the right numeral and round-trips
 - [ ] Unsupported suffix warns softly, blocks nothing and stores nothing
-- [ ] Empty and single-chord progressions render without error
+- [ ] Empty and single-chord progressions render per §4.6, not merely without error
+- [ ] Reordering or removing a chord carries its `pin` with it; no pin lands on a different chord
 - [ ] Adding past 32 chords is prevented
 - [ ] Back-analysis has an assertion self-check, including the `C♯` vs `D♭` case
 

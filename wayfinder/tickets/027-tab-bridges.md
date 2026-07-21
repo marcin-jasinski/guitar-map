@@ -32,10 +32,17 @@ To Scale travels the key's root plus the inferred scale name, which encodes ever
 inference concluded. To Chord travels the derived root and type only — the chord arrives stripped
 of its context, accepted because the reason to go there is to hear it.
 
+**The Scale bridge un-maps the modal name.** The button reads "Solo on C Ionian" but
+`{kind:'scale'}` stores a `SCALES` key, so it writes `'Major (Ionian)'` — TICKET-021's display map
+run backwards. Only two of the nine candidates differ between label and stored value; the other
+seven pass through unchanged, which is exactly why this is easy to get wrong once and never
+notice.
+
 ## Acceptance criteria
 
 - [ ] `▶ Play this chord` on a rail entry opens the Chord tab with that chord's root and type
 - [ ] `♪ Solo on <parent>` beside the parent header opens the Scale tab with the tonic and inferred scale
+- [ ] The Scale tab receives a real `SCALES` key — "Solo on C Ionian" lands on `'Major (Ionian)'`
 - [ ] Returning to the progression tab restores the progression, key and step unchanged
 - [ ] No Arpeggio bridge, no breadcrumb
 - [ ] Tuning is unaffected by either bridge

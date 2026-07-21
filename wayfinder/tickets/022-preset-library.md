@@ -27,7 +27,7 @@ type Preset = { name: string; tonality: 'major' | 'minor'; chords: Chord[] };
 | --- | --- | --- |
 | I–V–vi–IV | major | `I V vi IV` |
 | I–vi–IV–V | major | `I vi IV V` |
-| ii–V–I | major | `ii7 V7 Imaj7` |
+| ii–V–I | major | `iim7 V7 Imaj7` |
 | 12-bar blues | major | `I7×4 IV7×2 I7×2 V7 IV7 I7 V7` |
 | Mixolydian rock | major | `I ♭VII IV` |
 | Dorian vamp | minor | `i IV` |
@@ -39,6 +39,11 @@ type Preset = { name: string; tonality: 'major' | 'minor'; chords: Chord[] };
 The Andalusian is `i VII VI V`, not `i ♭VII ♭VI V` — minor keys use natural-minor degrees, so a
 flat sign there would mean a double flat. "Mixolydian rock" keeps its `♭VII`; that one is in a
 major key, where the flat is load-bearing.
+
+The numeral column is **rendered output, not stored input** — presets store `Chord` objects, and
+TICKET-020's mechanical rule produces these strings from them. `iim7` and `iim7♭5` both carry
+their `m` because both shipped suffixes do. If the column and the rule ever disagree, the rule
+wins and the table is wrong.
 
 ## Acceptance criteria
 
