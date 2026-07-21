@@ -158,6 +158,12 @@ type ParentAdvice = {
   **Aeolian**; the other seven are already bare. A two-entry display map, **and its inverse**,
   since §8's Scale bridge has to hand the Scale tab a real `SCALES` key. The keys themselves must
   **not** be renamed — they are persisted verbatim in every saved `{kind:'scale'}` favorite.
+  **"A Aeolian", not "A minor"** — decided, not incidental. Three of the nine candidates are a
+  kind of minor (Aeolian, harmonic, melodic), so "minor" is the one answer that doesn't say which
+  scale to play, which is the only thing this line exists to say. And a name that switched
+  registers for the two familiar cases would make them look like a different *kind* of answer
+  from "D Dorian" — the inference returns one scale out of nine every time, and the naming should
+  read that way every time.
 - **Exception: an altered degree, phrased as a swap** — each note outside the parent, named as an
   altered degree and paired with the parent note it displaces. Wording is generated from `note()`'s
   interval naming, not authored per case.
@@ -199,8 +205,11 @@ not nested inside it.
 - The **parent scale is named once**, above the neck, since it is constant across the progression.
 - The **five layer toggles (§6) sit under the neck**, in the same column as the swap sentences and
   the voicing readout — everything about *how the neck is drawn* below it, everything about *what
-  the progression is* in the rail. They are **session state, not saved**: §7 persists what the
-  player authored, and a layer toggle is a way of looking, not a thing to own.
+  the progression is* in the rail. They are **session state, not saved** — decided, not deferred:
+  §7 persists what the player authored, and a layer toggle is a way of looking, not a thing to
+  own. A favorite that restored with three layers switched off would read as a broken save rather
+  than as a remembered preference, and the player has no way to tell which it was. All five come
+  back on next session, which is also §6's default and therefore one rule instead of two.
 - **The shipped app-global controls are hidden on this tab**, not disabled: the label-mode control
   (§4.4 fixes the parent layer to note names and the chord layer to role colours, so there is
   nothing left to choose), the `position | octaves | whole` display control and the fret-width
