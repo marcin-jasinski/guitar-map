@@ -28,6 +28,11 @@ export type Dot = {
   badge: string;
   /** Spoken role, for the ARIA label. */
   role: string;
+  /** Progression-tab overlays, all pitch-class-level, all default off (spec §4.7):
+   *  §3's exception note, §6's held common tone, §4.5's dashed next-chord ghost. */
+  warnRing?: boolean;
+  cutRing?: boolean;
+  outline?: boolean;
 };
 
 export const ROLE_COLOR: Record<Role, string> = {

@@ -2,8 +2,8 @@
 id: TICKET-021
 title: Parent scale inference and per-chord exceptions
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: [TICKET-020]
 map: MAP-002
 ---
@@ -65,3 +65,22 @@ When more than half the chords carry exceptions, one soft non-blocking line says
 ## Blocked by
 
 - TICKET-020 — the progression model and the tab
+
+## Resolution
+
+`note()` is now exported from [`theory.ts`](../../src/lib/theory.ts). `inferParent()` in
+[`progression.ts`](../../src/lib/progression.ts) scores the nine 7-note `SCALES` rooted on the
+stored tonic by role-weighted coverage (3rd/7th → 2, else 1), walking chords as stored, `>`-tie-break
+so the first-declared scale wins; the self-checks confirm the two exact ties (Ionian vs Mixolydian
+at 14, Ionian vs Lydian at 18) resolve on declaration order, with a comment saying reordering
+`SCALES` flips them. Names use a two-entry `MODAL_NAME` map (Ionian/Aeolian) plus its inverse
+`scaleKeyOf()` for TICKET-027; the keys are unrenamed. Exceptions are computed as each chord tone
+outside the parent paired with the parent note sharing its letter, tagged with the tonic-relative
+interval via `note()`. `functionLabel()` names every non-diatonic chord (secondary
+dominant/leading-tone, borrowed-from-parallel, or bare-numeral-outside-the-key). `strained` fires
+when over half the chords carry exceptions. `progressionDots()` now layers faded parent name dots
+under the role-coloured chord dots and flags the current chord's outside notes with the new
+`Dot.warnRing`, which `Fretboard.svelte` renders as a `--warn` ring. Empty progressions run no
+inference. [`Progression.svelte`](../../src/lib/Progression.svelte) names the parent above the neck,
+shows function labels in the rail and swap sentences + the strained line under the neck. 92 tests
+green (7 new inference assertions), typecheck clean.

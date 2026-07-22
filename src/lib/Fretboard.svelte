@@ -171,6 +171,10 @@
                 {/each}
               {/if}
               <circle cx={x(f)} cy={y(s)} r={r + 2.5} fill="none" stroke={dot.colors[0]} stroke-width="1.6" opacity=".5" />
+              <!-- §3's exception note: a chord tone outside the parent scale, ringed in --warn. -->
+              {#if dot.warnRing}
+                <circle cx={x(f)} cy={y(s)} r={r + 3.5} fill="none" stroke="var(--warn)" stroke-width="2" />
+              {/if}
             {/if}
             <!-- Every dot always carries its text label, so nothing is encoded by colour alone (§1). -->
             <text x={x(f)} y={y(s) + 3.5} text-anchor="middle" class="lbl" class:ink={ghost}>{dot.label}</text>

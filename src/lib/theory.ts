@@ -53,7 +53,7 @@ export type Note = {
 
 const ROLES: Record<number, Role> = { 0: 'root', 2: '3rd', 4: '5th', 6: '7th' };
 
-function note(root: string, semitones: number, letterStep: number): Note {
+export function note(root: string, semitones: number, letterStep: number): Note {
   const alt = wrap(semitones - MAJOR_REF[letterStep]);
   return {
     pc: mod(notePc(root) + semitones, 12),

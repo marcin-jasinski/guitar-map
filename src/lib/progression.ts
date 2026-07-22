@@ -4,7 +4,17 @@
  * is stored, the chord symbol is always derived. No new music data — degrees map
  * to `theory.ts`'s `spell()` and the 16 shipped `CHORDS`.
  */
-import { CHORDS, chordNotes, chordSymbol, spell, type Note } from './theory';
+import {
+  CHORDS,
+  SCALES,
+  chordNotes,
+  chordSymbol,
+  note,
+  notePc,
+  scaleNotes,
+  spell,
+  type Note,
+} from './theory';
 import { ROLE_COLOR, type Dot } from './view';
 
 export type Tonality = 'major' | 'minor';
@@ -79,14 +89,127 @@ export function numeralOf(key: Key, ch: Chord): string {
   return s;
 }
 
+// ---- parent scale inference & exceptions (spec §3) -----------------------------
+
+/** Two shipped keys are not modal names; the other seven already are (§3). The
+ *  keys are never renamed — they persist verbatim in saved `{kind:'scale'}` favorites. */
+const MODAL_NAME: Record<string, string> = {
+  'Major (Ionian)': 'Ionian',
+  'Natural minor (Aeolian)': 'Aeolian',
+};
+const modalName = (scaleKey: string) => MODAL_NAME[scaleKey] ?? scaleKey;
+
+/** The inverse, for TICKET-027's Scale bridge: a modal display name back to its
+ *  `SCALES` key. Only the two mapped names differ; the rest pass through. */
+export function scaleKeyOf(modal: string): string {
+  for (const [key, name] of Object.entries(MODAL_NAME)) if (name === modal) return key;
+  return modal;
+}
+
+const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+/** Interval name of a note relative to the key tonic, e.g. "♯4" — via `note()`. */
+const intervalFromTonic = (tonic: string, name: string): string =>
+  note(tonic, mod(notePc(name) - notePc(tonic), 12), mod(LETTERS.indexOf(name[0]) - LETTERS.indexOf(tonic[0]), 7)).interval;
+
+/** A chord tone outside the parent, paired with the parent note it displaces. */
+export type Alteration = { play: Note; insteadOf: Note; interval: string };
+export type ParentAdvice = {
+  scaleKey: string; // a SCALES key
+  name: string; // modal display name, e.g. "C Ionian"
+  exceptions: Map<number, Alteration[]>; // chord index → its outside notes
+  /** Function label per chord, or null for a diatonic chord. */
+  labels: (string | null)[];
+  strained: boolean;
+};
+
+const isDiminished = (q: keyof typeof CHORDS) => CHORDS[q].intervals.includes(6);
+
+/** Every non-diatonic chord's function, from its numeral (§3). */
+function functionLabel(key: Key, ch: Chord): string {
+  if (ch.of) {
+    const tgt = degNumeral(degMinorish(key.tonality, ch.of.degree), ch.of);
+    return isDiminished(ch.quality)
+      ? `secondary leading-tone chord of ${tgt}`
+      : `secondary dominant of ${tgt}`;
+  }
+  const parallel: Tonality = key.tonality === 'major' ? 'minor' : 'major';
+  const parKey = parallel === 'major' ? 'Major (Ionian)' : 'Natural minor (Aeolian)';
+  const parPcs = new Set(scaleNotes(key.root, parKey).map((n) => n.pc));
+  if (chordNotesOf(key, ch).every((n) => parPcs.has(n.pc))) return `borrowed from ${key.root} ${parallel}`;
+  return `${numeralOf(key, ch)} — outside the key`;
+}
+
 /**
- * The current chord's tones as full-size role-coloured dots for the whole neck
- * (§4.4). Parent-scale and exception layers are added by TICKET-021. Empty when
- * there is no current chord.
+ * The parent scale to solo with, plus per-chord exceptions (§3). Score the nine
+ * shipped 7-note scales rooted on the tonic by role-weighted chord-tone coverage
+ * (3rd/7th count 2, root/5th/other count 1), walking the chords as stored so a
+ * repeat counts as prominence. Ties break by declaration order in `SCALES`.
+ * Returns null for an empty progression — no chords means every scale scores 0
+ * and the tie-break would confidently name the wrong thing (§4.6).
  */
-export function progressionDots(key: Key, chord: Chord | undefined): Map<number, Dot> {
+export function inferParent(prog: Progression): ParentAdvice | null {
+  if (!prog.chords.length) return null;
+  const tonic = prog.key.root;
+
+  let best: { scaleKey: string; score: number; pcs: Set<number> } | null = null;
+  for (const [scaleKey, f] of Object.entries(SCALES)) {
+    if (f.intervals.length !== 7) continue; // pentatonics/blues can only lose to their parents
+    const pcs = new Set(scaleNotes(tonic, scaleKey).map((n) => n.pc));
+    let score = 0;
+    for (const ch of prog.chords)
+      for (const n of chordNotesOf(prog.key, ch))
+        if (pcs.has(n.pc)) score += n.role === '3rd' || n.role === '7th' ? 2 : 1;
+    // Strictly greater, so the first-declared scale wins an exact tie.
+    if (!best || score > best.score) best = { scaleKey, score, pcs };
+  }
+  const { scaleKey, pcs } = best!;
+  const parentNotes = scaleNotes(tonic, scaleKey);
+
+  const exceptions = new Map<number, Alteration[]>();
+  prog.chords.forEach((ch, i) => {
+    const alts: Alteration[] = [];
+    for (const n of chordNotesOf(prog.key, ch)) {
+      if (pcs.has(n.pc)) continue;
+      const insteadOf = parentNotes.find((p) => p.name[0] === n.name[0]) ?? n;
+      alts.push({ play: n, insteadOf, interval: intervalFromTonic(tonic, n.name) });
+    }
+    if (alts.length) exceptions.set(i, alts);
+  });
+
+  return {
+    scaleKey,
+    name: `${tonic} ${modalName(scaleKey)}`,
+    exceptions,
+    labels: prog.chords.map((ch, i) => (exceptions.has(i) ? functionLabel(prog.key, ch) : null)),
+    strained: exceptions.size > prog.chords.length / 2,
+  };
+}
+
+// ---- neck rendering (spec §4.4, §4.7) ------------------------------------------
+
+/**
+ * The whole-neck dot map: the parent scale as small faded name dots underneath,
+ * the current chord's tones as full-size role-coloured dots on top, and each of
+ * the current chord's outside notes ringed in `--warn` (§3, §4.4). Later tickets
+ * add the forward layers (ghosts, cut rings) on top.
+ */
+export function progressionDots(
+  key: Key,
+  chord: Chord | undefined,
+  advice: ParentAdvice | null,
+  index: number,
+): Map<number, Dot> {
   const dots = new Map<number, Dot>();
+
+  // Parent scale first, so a shared pitch class is overwritten by the fuller chord dot.
+  if (advice) {
+    for (const n of scaleNotes(key.root, advice.scaleKey)) {
+      dots.set(n.pc, { name: n.name, label: n.name, colors: ['var(--c-scale)'], faded: true, badge: '', role: n.interval });
+    }
+  }
+
   if (!chord) return dots;
+  const outside = new Set((advice?.exceptions.get(index) ?? []).map((a) => a.play.pc));
   for (const n of chordNotesOf(key, chord)) {
     dots.set(n.pc, {
       name: n.name,
@@ -95,6 +218,7 @@ export function progressionDots(key: Key, chord: Chord | undefined): Map<number,
       faded: false,
       badge: '',
       role: n.interval,
+      warnRing: outside.has(n.pc),
     });
   }
   return dots;

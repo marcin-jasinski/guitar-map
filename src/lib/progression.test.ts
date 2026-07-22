@@ -1,5 +1,14 @@
 import { expect, test } from 'vitest';
-import { chordRoot, chordSymbolOf, numeralOf, type Chord, type Key } from './progression';
+import {
+  chordRoot,
+  chordSymbolOf,
+  inferParent,
+  numeralOf,
+  scaleKeyOf,
+  type Chord,
+  type Key,
+  type Progression,
+} from './progression';
 
 const C_MAJ: Key = { root: 'C', tonality: 'major' };
 const A_MIN: Key = { root: 'A', tonality: 'minor' };
@@ -40,4 +49,61 @@ test('numerals are cased by the minor-3rd rule, m dropped only for the bare tria
   expect(numeralOf(C_MAJ, { degree: 2, quality: 'm7♭5' })).toBe('iim7♭5');
   expect(numeralOf(C_MAJ, { degree: 7, quality: 'dim' })).toBe('vii°');
   expect(numeralOf(C_MAJ, { degree: 2, quality: 'sus4' })).toBe('IIsus4'); // no 3rd → upper
+});
+
+// ---- parent scale inference (spec §3, cross-cutting build notes) ----------------
+
+const prog = (key: Key, chords: Chord[]): Progression => ({ key, chords });
+const maj = (degree: number, alter?: -1 | 1): Chord => ({ degree, quality: 'major', alter });
+const dom7 = (degree: number, of?: number): Chord =>
+  ({ degree, quality: 'dom7', ...(of ? { of: { degree: of } } : {}) });
+
+test('I ♭VII IV in C major → C Mixolydian, zero exceptions', () => {
+  const a = inferParent(prog(C_MAJ, [maj(1), maj(7, -1), maj(4)]))!;
+  expect(a.name).toBe('C Mixolydian');
+  expect(a.exceptions.size).toBe(0);
+});
+
+test('i IV in D minor → D Dorian (modal naming, not "D minor")', () => {
+  const a = inferParent(prog({ root: 'D', tonality: 'minor' }, [
+    { degree: 1, quality: 'minor' },
+    maj(4),
+  ]))!;
+  expect(a.name).toBe('D Dorian');
+});
+
+test('I IV iv I → C Ionian, one exception A♭ for A — Ionian ties Mixolydian at 14, wins on SCALES order', () => {
+  // Both score 14 (no chord contains the 7th degree that separates them); Ionian
+  // wins only because 'Major (Ionian)' is declared first in SCALES. Reordering
+  // SCALES silently flips this.
+  const a = inferParent(prog(C_MAJ, [maj(1), maj(4), { degree: 4, quality: 'minor' }, maj(1)]))!;
+  expect(a.name).toBe('C Ionian');
+  expect(a.exceptions.size).toBe(1);
+  const [alt] = a.exceptions.get(2)!;
+  expect([alt.play.name, alt.insteadOf.name]).toEqual(['A♭', 'A']);
+});
+
+test('I V7/V V7 I → C Ionian, F♯ for F, labelled secondary dominant — Ionian ties Lydian at 18', () => {
+  // Ionian and Lydian both score 18: Lydian buys the D7's F♯ and loses the G7's F
+  // for the same weight. Ionian wins on SCALES declaration order.
+  const a = inferParent(prog(C_MAJ, [maj(1), dom7(5, 5), dom7(5), maj(1)]))!;
+  expect(a.name).toBe('C Ionian');
+  const [alt] = a.exceptions.get(1)!;
+  expect([alt.play.name, alt.insteadOf.name, alt.interval]).toEqual(['F♯', 'F', '♯4']);
+  expect(a.labels[1]).toBe('secondary dominant of V');
+});
+
+test('12-bar blues → Mixolydian, not Ionian', () => {
+  const blues = [dom7(1), dom7(1), dom7(1), dom7(1), dom7(4), dom7(4), dom7(1), dom7(1), dom7(5), dom7(4), dom7(1), dom7(5)];
+  expect(inferParent(prog(C_MAJ, blues))!.name).toBe('C Mixolydian');
+});
+
+test('empty progression runs no inference', () => {
+  expect(inferParent(prog(C_MAJ, []))).toBeNull();
+});
+
+test('scaleKeyOf inverts the modal display map', () => {
+  expect(scaleKeyOf('Ionian')).toBe('Major (Ionian)');
+  expect(scaleKeyOf('Aeolian')).toBe('Natural minor (Aeolian)');
+  expect(scaleKeyOf('Dorian')).toBe('Dorian'); // passes through
 });

@@ -12,6 +12,7 @@
   import {
     PROG_CAP,
     chordSymbolOf,
+    inferParent,
     numeralOf,
     progressionDots,
     type Chord,
@@ -24,7 +25,9 @@
   let prog = $derived(content as ProgressionContent);
 
   let current = $derived(prog.chords[prog.step]);
-  let dots = $derived(progressionDots(prog.key, current));
+  let advice = $derived(inferParent(prog));
+  let swaps = $derived(advice?.exceptions.get(prog.step) ?? []);
+  let dots = $derived(progressionDots(prog.key, current, advice, prog.step));
   // §4.7: reuse board()'s 'whole' branch verbatim — it lights every cell whose
   // pitch class is in `dots`. The window is ignored in whole mode.
   let neck = $derived(
@@ -66,6 +69,7 @@
         <button class="entry" class:on={i === prog.step} onclick={() => (prog.step = i)}>
           <b>{numeralOf(prog.key, ch)}</b>
           <span>{chordSymbolOf(prog.key, ch)}</span>
+          {#if advice?.labels[i]}<em>{advice.labels[i]}</em>{/if}
         </button>
       </li>
     {/each}
@@ -90,7 +94,9 @@
 </aside>
 
 <section>
-  <h2>{prog.chords.length ? chordSymbolOf(prog.key, current) : 'Add a chord to begin'}</h2>
+  <!-- The parent scale is named once, above the neck — it is constant across the
+       progression (§4.2). Empty progressions run no inference (§4.6). -->
+  <h2>{advice ? `parent: ${advice.name}` : 'Add a chord to begin'}</h2>
   <Fretboard
     {tuning}
     {dots}
@@ -105,11 +111,24 @@
   />
   <p class="hint">
     {#if prog.chords.length}
-      Every occurrence of the current chord's tones. Step with ↑ ↓ or click a rail entry.
+      Every occurrence of the current chord's tones over the faded parent scale. Step with ↑ ↓ or
+      click a rail entry.
     {:else}
       Add a chord to begin. Nothing is wrong — an empty progression just has nothing to show yet.
     {/if}
   </p>
+
+  <!-- Swaps are sentences, so they sit under the neck, not in the rail (§4.2). -->
+  {#if swaps.length}
+    <ul class="swaps">
+      {#each swaps as s}
+        <li>play <b>{s.play.name}</b> instead of {s.insteadOf.name} <span class="deg">({s.interval})</span></li>
+      {/each}
+    </ul>
+  {/if}
+  {#if advice?.strained}
+    <p class="warn">Over half these chords need an exception — the parent scale is a loose fit here.</p>
+  {/if}
 </section>
 
 <style>
@@ -124,9 +143,17 @@
     border-left: 3px solid transparent;
   }
   .entry.on { border-left-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+  .entry { flex-wrap: wrap; }
   .entry b { font-family: var(--font-mono); font-size: 0.9rem; min-width: 3.5em; }
   .entry span { font-size: 0.76rem; color: var(--muted); }
   .entry.on span { color: inherit; }
+  .entry em { flex-basis: 100%; font-size: 0.68rem; font-style: normal; color: var(--muted); }
+  .entry.on em { color: inherit; }
+
+  .swaps { list-style: none; padding: 0; margin: 8px 0 0; font-size: 0.8rem; }
+  .swaps li { margin-top: 2px; }
+  .swaps b { color: var(--warn); font-family: var(--font-mono); }
+  .swaps .deg { color: var(--muted); font-family: var(--font-mono); font-size: 0.74rem; }
   .add { width: 100%; color: var(--muted); }
   .seg { display: flex; gap: 4px; margin-top: 6px; }
   .seg button { flex: 1; text-transform: capitalize; }
