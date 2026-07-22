@@ -16,6 +16,7 @@
     ghosts,
     showWindow,
     win,
+    lines = [],
     onCenter,
     onPlayNote,
     onPickRoot,
@@ -31,6 +32,8 @@
     /** The window is only meaningful in position mode; elsewhere nothing is emphasised. */
     showWindow: boolean;
     win: FretWindow;
+    /** Guide-tone lines as cell-key pairs, drawn as arrowed `--accent` strokes (§6). */
+    lines?: { from: string; to: string }[];
     onCenter: (fret: number) => void;
     onPlayNote: (midi: number) => void;
     /** Re-anchor the octave view on one of the faint roots. */
@@ -73,6 +76,9 @@
         <stop offset="0" stop-color="var(--wood-2)" />
         <stop offset="1" stop-color="var(--wood-1)" />
       </linearGradient>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)" />
+      </marker>
     </defs>
 
     <rect
@@ -144,24 +150,26 @@
         {@const ghost = !played && ghosts.has(key)}
         {@const dot = played || ghost ? dots.get(midi % 12) : undefined}
         {#if dot}
-          {@const r = ghost ? 10 : dot.faded ? 10 : 13}
+          <!-- §4.5's next-chord ghost draws dashed like the octave-view ghost, but
+               in --accent; both share the outlined, panel-filled, ink-labelled look. -->
+          {@const outline = played && !!dot.outline}
+          {@const dashed = ghost || outline}
+          {@const r = dashed ? 11 : dot.faded ? 10 : 13}
           <g
             role="button" tabindex="0"
-            class="dot" class:faded={dot.faded && played} class:ghost
+            class="dot" class:faded={dot.faded && played && !outline} class:ghost class:outline
             aria-label={ghost
               ? `Start the shape from ${dot.name}, string ${s + 1} fret ${f}`
-              : `${dot.name}, ${dot.role}, string ${s + 1} fret ${f}${barred(s, f) ? ', barred' : ''}`}
+              : `${dot.name}, ${dot.role}, string ${s + 1} fret ${f}${outline ? ', next chord' : ''}${dot.cutRing ? ', held into the next chord' : ''}${barred(s, f) ? ', barred' : ''}`}
             onclick={() => (ghost ? onPickRoot(ghosts.get(key)!) : onPlayNote(midi))}
             onkeydown={(e) =>
               (e.key === 'Enter' || e.key === ' ') &&
               (e.preventDefault(), ghost ? onPickRoot(ghosts.get(key)!) : onPlayNote(midi))}
           >
-            {#if ghost}
-              <!-- Where else this shape could start: present, but never competing
-                   with the notes actually being shown. -->
+            {#if dashed}
               <circle
                 cx={x(f)} cy={y(s)} r={r} fill="var(--panel)"
-                stroke={dot.colors[0]} stroke-width="2" stroke-dasharray="3 2.5"
+                stroke={outline ? 'var(--accent)' : dot.colors[0]} stroke-width="2" stroke-dasharray="3 2.5"
               />
             {:else}
               <circle cx={x(f)} cy={y(s)} r={r} fill={dot.colors[0]} />
@@ -175,16 +183,30 @@
               {#if dot.warnRing}
                 <circle cx={x(f)} cy={y(s)} r={r + 3.5} fill="none" stroke="var(--warn)" stroke-width="2" />
               {/if}
+              <!-- §6's held common tone: a ring of panel colour cut into the dot — shape, not hue. -->
+              {#if dot.cutRing}
+                <circle cx={x(f)} cy={y(s)} r={r * 0.52} fill="none" stroke="var(--panel)" stroke-width="3" />
+              {/if}
             {/if}
             <!-- Every dot always carries its text label, so nothing is encoded by colour alone (§1). -->
-            <text x={x(f)} y={y(s) + 3.5} text-anchor="middle" class="lbl" class:ink={ghost}>{dot.label}</text>
-            {#if dot.badge && !ghost}
+            <text x={x(f)} y={y(s) + 3.5} text-anchor="middle" class="lbl" class:ink={dashed}>{dot.label}</text>
+            {#if dot.badge && !dashed}
               <circle cx={x(f) + r} cy={y(s) - r} r="7" fill="var(--panel)" stroke={dot.colors[0]} stroke-width="1.2" />
               <text x={x(f) + r} y={y(s) - r + 3} text-anchor="middle" class="badge">{dot.badge}</text>
             {/if}
           </g>
         {/if}
       {/each}
+    {/each}
+
+    <!-- Guide-tone lines: the only stroke on this tab (§6). Drawn last, over the dots. -->
+    {#each lines as ln}
+      {@const a = ln.from.split(':').map(Number)}
+      {@const b = ln.to.split(':').map(Number)}
+      <line
+        x1={x(a[1])} y1={y(a[0])} x2={x(b[1])} y2={y(b[0])}
+        class="guide" marker-end="url(#arrow)"
+      />
     {/each}
   </svg>
 </div>
@@ -202,6 +224,8 @@
   .dot.faded { opacity: 0.5; }
   .dot.ghost { opacity: 0.4; }
   .dot.ghost:hover { opacity: 0.95; }
+  .dot.outline { opacity: 0.7; }
+  .guide { stroke: var(--accent); stroke-width: 2.5; opacity: 0.9; pointer-events: none; }
   .dot:hover { filter: brightness(1.15); }
   .dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .lbl { fill: #fff; font-size: 11px; font-weight: 700; paint-order: stroke; }

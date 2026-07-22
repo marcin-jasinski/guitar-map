@@ -9,8 +9,10 @@ import {
   guideVoices,
   inferParent,
   keyShift,
+  ALL_LAYERS,
   numeralOf,
   parseChord,
+  progressionDots,
   scaleKeyOf,
   shiftPins,
   solveChain,
@@ -216,6 +218,36 @@ test('a pin too wide to octave-shift drops to auto with its index reported', () 
   const prog: Progression = { key: { root: 'C', tonality: 'major' }, chords: [{ degree: 1, quality: 'major', pin: [1, null, null, null, null, 20] }] };
   expect(shiftPins(prog, -2, STD)).toEqual([0]);
   expect(prog.chords[0].pin).toBeUndefined();
+});
+
+// ---- connection layers (spec §4.5, §6, TICKET-025) ------------------------------
+
+test('forward layers: held tones get a cut ring, the rest of the next chord ghosts', () => {
+  const ii: Chord = { degree: 2, quality: 'min7' }; // Dm7: D F A C
+  const V: Chord = { degree: 5, quality: 'dom7' }; // G7: G B D F
+  const dots = progressionDots(C_MAJ, ii, V, null, 0, ALL_LAYERS);
+  // D (pc 2) and F (pc 5) are common → held into G7 → cut ring, not ghosts.
+  expect(dots.get(notePc('D'))?.cutRing).toBe(true);
+  expect(dots.get(notePc('F'))?.cutRing).toBe(true);
+  // G and B are in G7 but not Dm7 → dashed ghosts.
+  expect(dots.get(notePc('G'))?.outline).toBe(true);
+  expect(dots.get(notePc('B'))?.outline).toBe(true);
+  // A is a Dm7 tone not held → no cut ring.
+  expect(dots.get(notePc('A'))?.cutRing).toBeFalsy();
+});
+
+test('a one-chord progression draws no ghosts and no cut rings', () => {
+  const dots = progressionDots(C_MAJ, { degree: 2, quality: 'min7' }, undefined, null, 0, ALL_LAYERS);
+  const vals = [...dots.values()];
+  expect(vals.some((d) => d.outline)).toBe(false);
+  expect(vals.some((d) => d.cutRing)).toBe(false);
+});
+
+test('layer toggles suppress their channel independently', () => {
+  const ii: Chord = { degree: 2, quality: 'min7' };
+  const V: Chord = { degree: 5, quality: 'dom7' };
+  const noNext = progressionDots(C_MAJ, ii, V, null, 0, { ...ALL_LAYERS, next: false });
+  expect([...noNext.values()].some((d) => d.outline || d.cutRing)).toBe(false);
 });
 
 test('scaleKeyOf inverts the modal display map', () => {

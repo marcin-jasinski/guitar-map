@@ -10,12 +10,15 @@
   import { ROOTS, type Tuning } from './theory';
   import type { Content, ProgressionContent } from './store.svelte';
   import {
+    ALL_LAYERS,
     PRESET_PROGRESSIONS,
     PROG_CAP,
     SUPPORTED_SUFFIXES,
     awkwardTransitions,
     chordCandidates,
     chordSymbolOf,
+    guideCells,
+    guideVoices,
     inferParent,
     keyShift,
     numeralOf,
@@ -25,6 +28,7 @@
     solveChain,
     voicingReadout,
     type Chord,
+    type Layers,
     type Preset,
     type Tonality,
   } from './progression';
@@ -34,10 +38,17 @@
   // Only rendered when the active tab is the progression, so the cast always holds.
   let prog = $derived(content as ProgressionContent);
 
+  // The five neck layers, session-only — a way of looking is not a thing to own,
+  // so they are never saved and reset on each session (§4.2, §6).
+  let layers = $state<Layers>({ ...ALL_LAYERS });
+
   let current = $derived(prog.chords[prog.step]);
+  // The next chord wraps; on a one-chord progression there is none, so the three
+  // forward layers draw nothing (§4.3, §4.6).
+  let nextChord = $derived(prog.chords.length > 1 ? prog.chords[(prog.step + 1) % prog.chords.length] : undefined);
   let advice = $derived(inferParent(prog));
   let swaps = $derived(advice?.exceptions.get(prog.step) ?? []);
-  let dots = $derived(progressionDots(prog.key, current, advice, prog.step));
+  let dots = $derived(progressionDots(prog.key, current, nextChord, advice, prog.step, layers));
 
   // The voicing chain — never drawn as a shape, only read out; it is the frame
   // the guide-tone line hangs on (§5).
@@ -47,6 +58,19 @@
   const sameFrets = (a: (number | null)[], b: (number | null)[]) => a.length === b.length && a.every((x, i) => x === b[i]);
   let shapeIndex = $derived(currentVoicing ? cands.findIndex((c) => sameFrets(c, currentVoicing.frets)) : -1);
   let awkward = $derived(awkwardTransitions(prog, tuning, voicings));
+
+  // Two guide-tone lines from this voicing's guide voices to the next's (§6). None
+  // on a one-chord progression, and none when the line layer is off.
+  let lines = $derived.by(() => {
+    if (!layers.line || !nextChord || !current || !currentVoicing) return [];
+    const from = guideCells(tuning, currentVoicing.frets, guideVoices(prog.key, current));
+    const to = guideCells(tuning, voicings[(prog.step + 1) % prog.chords.length].frets, guideVoices(prog.key, nextChord));
+    const out: { from: string; to: string }[] = [];
+    for (let k = 0; k < Math.min(from.length, to.length); k++) {
+      if (from[k] && to[k]) out.push({ from: from[k]!, to: to[k]! });
+    }
+    return out;
+  });
   // §4.7: reuse board()'s 'whole' branch verbatim — it lights every cell whose
   // pitch class is in `dots`. The window is ignored in whole mode.
   let neck = $derived(
@@ -245,6 +269,7 @@
   <Fretboard
     {tuning}
     {dots}
+    {lines}
     cells={neck.cells}
     barre={null}
     ghosts={neck.ghosts}
@@ -254,6 +279,14 @@
     onPlayNote={noop}
     onPickRoot={noop}
   />
+
+  <!-- Five independent layer toggles, none mutually exclusive — each owns a
+       different visual channel (§6). Session-only. -->
+  <div class="layers" role="group" aria-label="Neck layers">
+    {#each [['parent', 'parent scale'], ['chord', 'chord'], ['exceptions', 'exceptions'], ['next', 'next chord'], ['line', 'guide tones']] as const as [k, name]}
+      <button aria-pressed={layers[k]} onclick={() => (layers[k] = !layers[k])}>{name}</button>
+    {/each}
+  </div>
   <p class="hint">
     {#if prog.chords.length}
       Every occurrence of the current chord's tones over the faded parent scale. Step with ↑ ↓ or
@@ -315,6 +348,9 @@
   .entry.on span { color: inherit; }
   .entry em { flex-basis: 100%; font-size: 0.68rem; font-style: normal; color: var(--muted); }
   .entry.on em { color: inherit; }
+
+  .layers { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+  .layers button { font-size: 0.72rem; padding: 4px 8px; }
 
   .voicing { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
   .voicing .readout { font-family: var(--font-mono); font-size: 0.9rem; letter-spacing: 0.04em; }

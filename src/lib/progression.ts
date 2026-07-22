@@ -253,39 +253,65 @@ export function parseChord(key: Key, text: string): Chord | null {
 
 // ---- neck rendering (spec §4.4, §4.7) ------------------------------------------
 
+/** The five independently-toggleable neck layers (§6), session-only. */
+export type Layers = { parent: boolean; chord: boolean; exceptions: boolean; next: boolean; line: boolean };
+export const ALL_LAYERS: Layers = { parent: true, chord: true, exceptions: true, next: true, line: true };
+
 /**
- * The whole-neck dot map: the parent scale as small faded name dots underneath,
- * the current chord's tones as full-size role-coloured dots on top, and each of
- * the current chord's outside notes ringed in `--warn` (§3, §4.4). Later tickets
- * add the forward layers (ghosts, cut rings) on top.
+ * The whole-neck dot map, all layers on one pitch-class-keyed map (§4.7):
+ * - parent scale — small faded name dots underneath (§4.4);
+ * - current chord — full-size role-coloured dots on top;
+ * - exception notes — a `--warn` ring on the chord tones outside the parent (§3);
+ * - held common tones — a cut ring on current tones carried into the next chord,
+ *   forward-only (§6);
+ * - next chord — dashed outline ghosts for its tones *not* in the current chord;
+ *   a pitch class in both is a held tone, not a ghost (§4.5).
+ * `nextChord` is undefined on a one-chord progression, so the three forward layers
+ * draw nothing (§4.6). Each layer respects its toggle.
  */
 export function progressionDots(
   key: Key,
   chord: Chord | undefined,
+  nextChord: Chord | undefined,
   advice: ParentAdvice | null,
   index: number,
+  layers: Layers,
 ): Map<number, Dot> {
   const dots = new Map<number, Dot>();
 
   // Parent scale first, so a shared pitch class is overwritten by the fuller chord dot.
-  if (advice) {
+  if (advice && layers.parent) {
     for (const n of scaleNotes(key.root, advice.scaleKey)) {
       dots.set(n.pc, { name: n.name, label: n.name, colors: ['var(--c-scale)'], faded: true, badge: '', role: n.interval });
     }
   }
 
   if (!chord) return dots;
-  const outside = new Set((advice?.exceptions.get(index) ?? []).map((a) => a.play.pc));
-  for (const n of chordNotesOf(key, chord)) {
-    dots.set(n.pc, {
-      name: n.name,
-      label: n.name,
-      colors: [ROLE_COLOR[n.role]],
-      faded: false,
-      badge: '',
-      role: n.interval,
-      warnRing: outside.has(n.pc),
-    });
+  const curPcs = new Set(chordNotesOf(key, chord).map((n) => n.pc));
+  const nextPcs = new Set(nextChord ? chordNotesOf(key, nextChord).map((n) => n.pc) : []);
+  const outside = layers.exceptions ? new Set((advice?.exceptions.get(index) ?? []).map((a) => a.play.pc)) : new Set<number>();
+
+  if (layers.chord) {
+    for (const n of chordNotesOf(key, chord)) {
+      dots.set(n.pc, {
+        name: n.name,
+        label: n.name,
+        colors: [ROLE_COLOR[n.role]],
+        faded: false,
+        badge: '',
+        role: n.interval,
+        warnRing: outside.has(n.pc),
+        cutRing: layers.next && nextPcs.has(n.pc), // held into the next chord
+      });
+    }
+  }
+
+  // Forward ghosts: the next chord's tones that are not held from the current one.
+  if (layers.next && nextChord) {
+    for (const n of chordNotesOf(key, nextChord)) {
+      if (curPcs.has(n.pc)) continue; // a shared pitch class is a held tone (cut ring), never a ghost
+      dots.set(n.pc, { name: n.name, label: n.name, colors: ['var(--c-scale)'], faded: false, badge: '', role: n.interval, outline: true });
+    }
   }
   return dots;
 }

@@ -2,8 +2,8 @@
 id: TICKET-025
 title: Guide-tone lines, common tones and forward ghosts
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: [TICKET-021, TICKET-024]
 map: MAP-002
 ---
@@ -58,3 +58,18 @@ dashed outlines, a cut ring, a `--warn` ring, and the line as the only stroke. N
 
 - TICKET-021 — the parent scale and exception layers
 - TICKET-024 — the voicing chain the lines hang on
+
+## Resolution
+
+`progressionDots()` now takes the next chord and a `Layers` toggle set and layers all five channels
+onto the one pitch-class map: held tones (a current tone whose pc is in the next chord) get
+`Dot.cutRing`, next-chord tones *not* held get `Dot.outline` (dashed ghost), each respecting its
+toggle. `nextChord` is undefined on a one-chord progression, so the three forward layers draw nothing.
+[`Fretboard.svelte`](../../src/lib/Fretboard.svelte) gained one prop — `lines: {from,to}[]` — drawn as
+arrowed `--accent` strokes via an SVG marker (the only stroke on this tab); it renders `outline` dots
+dashed like the octave ghost but in accent, and `cutRing` as a panel-colour ring cut into the dot.
+[`Progression.svelte`](../../src/lib/Progression.svelte) holds the five session-only layer toggles
+under the neck, derives the two guide-tone `lines` from `guideCells()` of the current and next
+voicings (TICKET-024's rule, not a second one), and passes them through. Self-checks cover the
+ii→V held-tone/ghost split, a one-chord progression drawing neither, and a toggle suppressing its
+channel. 104 tests green, typecheck clean, production build succeeds.
