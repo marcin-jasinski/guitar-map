@@ -4,13 +4,18 @@
  * not referenced, so loading one always restores exactly what was saved.
  */
 import { PRESET_TUNINGS, autoLabel, chordSymbol, type FretWindow, type Tuning } from './theory';
+import type { Chord, Key } from './progression';
 
 export type ChordSlot = { root: string; type: string };
 
 export type Content =
   | { kind: 'scale'; root: string; scale: string; degree: number | null }
   | { kind: 'arpeggio'; root: string; chord: string }
-  | { kind: 'chord'; slots: ChordSlot[] };
+  | { kind: 'chord'; slots: ChordSlot[] }
+  | { kind: 'progression'; key: Key; chords: Chord[]; step: number };
+
+/** The progression variant, for the tab component and persistence (§7). */
+export type ProgressionContent = Extract<Content, { kind: 'progression' }>;
 
 export type LabelMode = 'names' | 'degrees' | 'intervals';
 
@@ -66,10 +71,11 @@ $effect.root(() => {
   });
 });
 
-export const describeContent = (c: Content) =>
+export const describeContent = (c: Content): string =>
   c.kind === 'scale' ? `${c.root} ${c.scale}`
   : c.kind === 'arpeggio' ? `${chordSymbol(c.root, c.chord)} arpeggio`
-  : c.slots.map((s) => chordSymbol(s.root, s.type)).join(' + ');
+  : c.kind === 'chord' ? c.slots.map((s) => chordSymbol(s.root, s.type)).join(' + ')
+  : `${c.key.root} ${c.key.tonality} progression`; // refined in TICKET-026
 
 export const favoriteName = (f: Omit<Favorite, 'id' | 'name'>) =>
   [

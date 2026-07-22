@@ -1,6 +1,7 @@
 <script lang="ts">
   import Favorites from './lib/Favorites.svelte';
   import Fretboard from './lib/Fretboard.svelte';
+  import Progression from './lib/Progression.svelte';
   import TuningPicker from './lib/TuningPicker.svelte';
   import { playNote, playSequence, strum } from './lib/audio';
   import {
@@ -40,8 +41,20 @@
     scale: { kind: 'scale', root: 'C', scale: 'Major (Ionian)', degree: null },
     chord: { kind: 'chord', slots: [{ root: 'C', type: 'major' }] },
     arpeggio: { kind: 'arpeggio', root: 'C', chord: 'maj7' },
+    // The hardcoded tracer bullet: I V7/V V7 I exercises the `of` field (§1).
+    progression: {
+      kind: 'progression',
+      key: { root: 'C', tonality: 'major' },
+      chords: [
+        { degree: 1, quality: 'major' },
+        { degree: 5, quality: 'dom7', of: { degree: 5 } },
+        { degree: 5, quality: 'dom7' },
+        { degree: 1, quality: 'major' },
+      ],
+      step: 0,
+    },
   };
-  const TABS: Tab[] = ['scale', 'chord', 'arpeggio'];
+  const TABS: Tab[] = ['scale', 'chord', 'arpeggio', 'progression'];
 
   let tuning = $state<Tuning>(structuredClone(PRESET_TUNINGS[0]));
   let tab = $state<Tab>('scale');
@@ -78,7 +91,11 @@
   );
   let activeLabel = $derived(effectiveLabelMode(content, labelMode));
   let triads = $derived(content.kind === 'scale' ? diatonicTriads(content.root, content.scale) : []);
-  let root = $derived(content.kind === 'chord' ? content.slots[0].root : content.root);
+  let root = $derived(
+    content.kind === 'chord' ? content.slots[0].root
+    : content.kind === 'progression' ? content.key.root
+    : content.root,
+  );
   let slots = $derived(content.kind === 'chord' ? content.slots : []);
 
   // The window clamps to the neck; near an edge the clicked fret stays inside it
@@ -196,6 +213,9 @@
 </div>
 
 <main>
+  {#if content.kind === 'progression'}
+    <Progression bind:content {tuning} />
+  {:else}
   <aside>
     {#if content.kind === 'scale'}
       <div class="row">
@@ -385,6 +405,7 @@
       {/if}
     </ul>
   </section>
+  {/if}
 </main>
 
 <style>

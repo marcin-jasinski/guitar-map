@@ -2,8 +2,8 @@
 id: TICKET-020
 title: Progression tab — model, rail and chord stepping
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: [TICKET-019]
 map: MAP-002
 ---
@@ -84,3 +84,22 @@ forward layers, which draw nothing because the chord is its own successor.
 ## Blocked by
 
 - TICKET-019 — the tab bar and per-tab content state
+
+## Resolution
+
+New module [`progression.ts`](../../src/lib/progression.ts) holds the model (`Key`, `Deg`, `Chord`
+with `of?`/`pin?`, `Progression`) and everything derived from it: `offset()` computes a chord root's
+letter-step + semitones above the key root (a secondary measures its outer degree above the target,
+both degrees against the key tonality), `chordRoot`/`chordSymbolOf`/`chordNotesOf` derive via
+`spell()`/`chordNotes`, and `numeralOf()` renders mechanically (case by the minor-3rd test, `m`
+dropped only for the bare triad, `/target` for secondaries). `progressionDots()` maps the current
+chord's tones to role-coloured dots. The progression became a fourth `Content` kind in
+[`store.svelte.ts`](../../src/lib/store.svelte.ts); `describeContent` gained a placeholder branch
+(refined in TICKET-026). New component [`Progression.svelte`](../../src/lib/Progression.svelte)
+renders the rail + whole-neck via `board()`'s `'whole'` branch (reused verbatim) and owns the ↑/↓
+stepping (wrapping, `preventDefault`, INPUT/SELECT/TEXTAREA guard); [`App.svelte`](../../src/App.svelte)
+adds the fourth tab (hardcoded `I V7/V V7 I`) and renders `Progression` in place of the app-global
+aside/section, so the label/display/audio controls simply aren't drawn there. `ROLE_COLOR` is now
+exported from `view.ts`; empty/one-chord states draw per §4.6. Self-checks in
+[`progression.test.ts`](../../src/lib/progression.test.ts) cover the secondary dominant, a ♭-altered
+degree, minor-key degrees and the `of`-target tonality. 85 tests green, typecheck clean.

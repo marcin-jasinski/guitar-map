@@ -30,7 +30,7 @@ export type Dot = {
   role: string;
 };
 
-const ROLE_COLOR: Record<Role, string> = {
+export const ROLE_COLOR: Record<Role, string> = {
   root: 'var(--c-root)',
   '3rd': 'var(--c-triad)',
   '5th': 'var(--c-fifth)',
@@ -83,6 +83,10 @@ export function noteMap(content: Content, mode: LabelMode): Map<number, Dot> {
     return dots;
   }
 
+  // The progression tab computes its own dots (progression.ts); noteMap only
+  // handles the three original kinds.
+  if (content.kind !== 'chord') return dots;
+
   if (content.slots.length === 1) {
     const { root, type } = content.slots[0];
     for (const n of chordNotes(root, type)) put(n, [ROLE_COLOR[n.role]], false);
@@ -132,7 +136,8 @@ export type Board = {
   ghosts: Map<string, number>;
 };
 
-export const contentRoot = (c: Content) => (c.kind === 'chord' ? c.slots[0].root : c.root);
+export const contentRoot = (c: Content) =>
+  c.kind === 'chord' ? c.slots[0].root : c.kind === 'progression' ? c.key.root : c.root;
 
 /** A root the octave view can start from: a real place to put your finger. */
 export type Anchor = { string: number; fret: number; midi: number };
