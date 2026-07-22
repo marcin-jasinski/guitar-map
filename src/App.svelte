@@ -165,13 +165,17 @@
     return inWin ?? rootAnchors(tuning, content)[0]?.midi ?? 60;
   }
 
-  const snapshot = () => ({
-    tuning: structuredClone($state.snapshot(tuning)),
-    content: structuredClone($state.snapshot(content)),
-    window: { ...win },
-    labelMode,
-    display: { ...display },
-  });
+  const snapshot = () => {
+    const base = {
+      tuning: structuredClone($state.snapshot(tuning)),
+      content: structuredClone($state.snapshot(content)),
+    };
+    // The progression tab uses none of window/labelMode/display, so its favorite
+    // omits them and recomputes everything else on load (§7).
+    return content.kind === 'progression'
+      ? base
+      : { ...base, window: { ...win }, labelMode, display: { ...display } };
+  };
 
   function loadFavorite(f: Favorite) {
     tuning = structuredClone($state.snapshot(f.tuning));
@@ -181,8 +185,9 @@
     stash[tab] = content;
     tab = c.kind;
     content = c;
-    win = { ...f.window };
-    labelMode = f.labelMode;
+    // window and labelMode are optional now — progression favorites omit them (§7).
+    win = { ...(f.window ?? { startFret: 5, width: 5 }) };
+    labelMode = f.labelMode ?? 'names';
     display = { ...(f.display ?? { mode: 'position', octaves: 1, anchor: 0 }) };
   }
 
@@ -214,7 +219,7 @@
 
 <main>
   {#if content.kind === 'progression'}
-    <Progression bind:content {tuning} />
+    <Progression bind:content bind:tuning {snapshot} onLoad={loadFavorite} />
   {:else}
   <aside>
     {#if content.kind === 'scale'}

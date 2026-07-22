@@ -2,8 +2,8 @@
 id: TICKET-026
 title: Persist progressions in the favorites store
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: [TICKET-022, TICKET-024]
 map: MAP-002
 ---
@@ -59,3 +59,19 @@ chords, the only thing the user authored, never change.
 
 - TICKET-022 — the picker the Saved group joins
 - TICKET-024 — the pinned overrides that get saved
+
+## Resolution
+
+`Favorite.window` and `Favorite.labelMode` are now optional in
+[`store.svelte.ts`](../../src/lib/store.svelte.ts), like `display?`; the store stays at `version: 1`
+(the union member needs no bump). `describeContent` gained a real progression branch
+(`C major · I – iv – V7/V – V7`, truncating past four with `…`) and `favoriteName` drops the fret
+range for a progression and guards the now-optional `window`. Both read sites are handled:
+`favoriteName` (in the store) and the `App.svelte` load path (`f.window ?? …`, `f.labelMode ?? …`).
+`App.svelte`'s `snapshot()` omits window/labelMode/display for a progression, and `loadFavorite`
+already selects the owning tab (TICKET-019), so a progression favorite recomputes parent/exceptions/
+voicings on load. The progression tab keeps `TuningPicker` and `Favorites` (only the label/display/
+audio controls are hidden, §4.2), and its rail Load picker now shows two labelled groups — Presets
+and Saved — routing Saved through the shared `onLoad`. Self-checks assert the progression name format,
+the omitted fields, `version === 1`, and that windowed kinds still get their fret range. 106 tests
+green, typecheck clean, build succeeds.

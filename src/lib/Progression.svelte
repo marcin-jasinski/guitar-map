@@ -6,9 +6,11 @@
    * occurrence, not a box (§4.4). The app-global label/display/audio controls are
    * simply not rendered here, so other tabs find them untouched (§4.2).
    */
+  import Favorites from './Favorites.svelte';
   import Fretboard from './Fretboard.svelte';
+  import TuningPicker from './TuningPicker.svelte';
   import { ROOTS, type Tuning } from './theory';
-  import type { Content, ProgressionContent } from './store.svelte';
+  import { store, type Content, type Favorite, type ProgressionContent } from './store.svelte';
   import {
     ALL_LAYERS,
     PRESET_PROGRESSIONS,
@@ -34,9 +36,22 @@
   } from './progression';
   import { board, chordTypes } from './view';
 
-  let { content = $bindable(), tuning }: { content: Content; tuning: Tuning } = $props();
+  let {
+    content = $bindable(),
+    tuning = $bindable(),
+    snapshot,
+    onLoad,
+  }: {
+    content: Content;
+    tuning: Tuning;
+    snapshot: () => Omit<Favorite, 'id' | 'name'>;
+    onLoad: (f: Favorite) => void;
+  } = $props();
   // Only rendered when the active tab is the progression, so the cast always holds.
   let prog = $derived(content as ProgressionContent);
+
+  // The rail's Saved group — the same favorites list, filtered to progressions (§7).
+  let savedProgs = $derived(store.favorites.filter((f) => f.content.kind === 'progression'));
 
   // The five neck layers, session-only — a way of looking is not a thing to own,
   // so they are never saved and reset on each session (§4.2, §6).
@@ -172,20 +187,31 @@
 
 <aside>
   <h3>Load</h3>
-  <!-- One picker; the Saved group joins here in TICKET-026. -->
+  <!-- One picker, two labelled groups — they load differently (§7). -->
   <select
     aria-label="Load a progression"
     value=""
     onchange={(e) => {
-      const p = PRESET_PROGRESSIONS.find((x) => x.name === e.currentTarget.value);
-      if (p) loadPreset(p);
+      const v = e.currentTarget.value;
+      if (v.startsWith('preset:')) {
+        const p = PRESET_PROGRESSIONS.find((x) => x.name === v.slice(7));
+        if (p) loadPreset(p);
+      } else if (v.startsWith('saved:')) {
+        const f = savedProgs.find((x) => x.id === v.slice(6));
+        if (f) onLoad(f);
+      }
       e.currentTarget.value = '';
     }}
   >
     <option value="" disabled>Load a progression…</option>
     <optgroup label="Presets">
-      {#each PRESET_PROGRESSIONS as p}<option value={p.name}>{p.name}</option>{/each}
+      {#each PRESET_PROGRESSIONS as p}<option value={'preset:' + p.name}>{p.name}</option>{/each}
     </optgroup>
+    {#if savedProgs.length}
+      <optgroup label="Saved">
+        {#each savedProgs as f}<option value={'saved:' + f.id}>{f.name}</option>{/each}
+      </optgroup>
+    {/if}
   </select>
 
   <h3>Progression</h3>
@@ -260,6 +286,10 @@
       <button aria-pressed={prog.key.tonality === t} onclick={() => (prog.key.tonality = t as Tonality)}>{t}</button>
     {/each}
   </div>
+
+  <!-- Tuning stays app-global and Favorites is the one save/load list across tabs. -->
+  <TuningPicker bind:tuning />
+  <Favorites {snapshot} {onLoad} />
 </aside>
 
 <section>

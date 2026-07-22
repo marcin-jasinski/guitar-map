@@ -4,7 +4,7 @@
  * not referenced, so loading one always restores exactly what was saved.
  */
 import { PRESET_TUNINGS, autoLabel, chordSymbol, type FretWindow, type Tuning } from './theory';
-import type { Chord, Key } from './progression';
+import { numeralOf, type Chord, type Key } from './progression';
 
 export type ChordSlot = { root: string; type: string };
 
@@ -37,8 +37,10 @@ export type Favorite = {
   name: string;
   tuning: Tuning;
   content: Content;
-  window: FretWindow;
-  labelMode: LabelMode;
+  /** Optional: the progression tab uses none of these, so its favorites omit
+   *  them (§7). Existing favorites all carry both, so nothing breaks. */
+  window?: FretWindow;
+  labelMode?: LabelMode;
   /** Optional so favorites saved before display modes existed still load. */
   display?: Display;
 };
@@ -71,18 +73,27 @@ $effect.root(() => {
   });
 });
 
+/** `C major · I – iv – V7/V – V7`, truncating past four chords with `…` (§7). */
+function describeProgression(c: Extract<Content, { kind: 'progression' }>): string {
+  const nums = c.chords.map((ch) => numeralOf(c.key, ch));
+  const shown = nums.slice(0, 4).join(' – ') + (nums.length > 4 ? ' …' : '');
+  return `${c.key.root} ${c.key.tonality}${nums.length ? ` · ${shown}` : ''}`;
+}
+
 export const describeContent = (c: Content): string =>
   c.kind === 'scale' ? `${c.root} ${c.scale}`
   : c.kind === 'arpeggio' ? `${chordSymbol(c.root, c.chord)} arpeggio`
   : c.kind === 'chord' ? c.slots.map((s) => chordSymbol(s.root, s.type)).join(' + ')
-  : `${c.key.root} ${c.key.tonality} progression`; // refined in TICKET-026
+  : describeProgression(c);
 
-export const favoriteName = (f: Omit<Favorite, 'id' | 'name'>) =>
-  [
-    describeContent(f.content),
-    f.tuning.name || autoLabel(f.tuning),
-    `frets ${f.window.startFret}–${f.window.startFret + f.window.width - 1}`,
-  ].join(' — ');
+export const favoriteName = (f: Omit<Favorite, 'id' | 'name'>) => {
+  const parts = [describeContent(f.content), f.tuning.name || autoLabel(f.tuning)];
+  // The fret range is meaningless for a progression, which has no window (§7).
+  if (f.content.kind !== 'progression' && f.window) {
+    parts.push(`frets ${f.window.startFret}–${f.window.startFret + f.window.width - 1}`);
+  }
+  return parts.join(' — ');
+};
 
 /**
  * Everything entering the store gets flattened to plain data here rather than at

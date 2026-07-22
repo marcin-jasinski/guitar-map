@@ -1,6 +1,7 @@
 import { beforeEach, expect, test } from 'vitest';
-import { addFavorite, collectTuning, store } from './store.svelte';
+import { addFavorite, collectTuning, favoriteName, store } from './store.svelte';
 import { PRESET_TUNINGS, type Tuning } from './theory';
+import type { Chord } from './progression';
 
 /**
  * A `$state` tuning reaches the store as a proxy, and `structuredClone` refuses
@@ -66,4 +67,36 @@ test('saving a favorite also collects its tuning, proxied or not', () => {
   expect(store.favorites[0].name).toContain('From a favorite');
   expect(store.customTunings.map((t) => t.name)).toContain('From a favorite');
   expect(() => structuredClone(store.favorites[0])).not.toThrow();
+});
+
+test('a progression favorite names without a fret range and omits window/labelMode', () => {
+  const chords: Chord[] = [
+    { degree: 1, quality: 'major' },
+    { degree: 4, quality: 'minor' },
+    { degree: 5, quality: 'dom7', of: { degree: 5 } },
+    { degree: 5, quality: 'dom7' },
+    { degree: 1, quality: 'major' }, // fifth chord → truncated with …
+  ];
+  const snapshot = {
+    tuning: { ...PRESET_TUNINGS[0] },
+    content: { kind: 'progression', key: { root: 'C', tonality: 'major' }, chords, step: 0 } as const,
+  };
+  addFavorite(snapshot);
+  const fav = store.favorites[0];
+  expect(fav.name).toBe('C major · I – iv – V7/V – V7 … — Standard');
+  expect(fav.name).not.toContain('frets');
+  expect(fav.window).toBeUndefined();
+  expect(fav.labelMode).toBeUndefined();
+  // The store never leaves version 1, so old favorites still load.
+  expect(store.version).toBe(1);
+});
+
+test('favoriteName still adds the fret range for a windowed content kind', () => {
+  const name = favoriteName({
+    tuning: PRESET_TUNINGS[0],
+    content: { kind: 'scale', root: 'C', scale: 'Major (Ionian)', degree: null },
+    window: { startFret: 5, width: 5 },
+    labelMode: 'names',
+  });
+  expect(name).toContain('frets 5–9');
 });
