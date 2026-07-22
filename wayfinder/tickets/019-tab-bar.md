@@ -2,8 +2,8 @@
 id: TICKET-019
 title: Tab bar with per-tab content state
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: []
 map: MAP-002
 ---
@@ -44,3 +44,15 @@ No progression tab in this ticket — three tabs, nothing new to look at.
 ## Blocked by
 
 None — can start immediately.
+
+## Resolution
+
+The `scale | chord | arpeggio` segmented control in [`App.svelte`](../../src/App.svelte) is now a
+top-level `role="tablist"` tab bar between the header and `<main>`. Per-tab content state is a live
+`content` plus a `stash: Partial<Record<Tab, Content>>`: `switchTab()` parks the active content in
+`stash` under the outgoing tab and restores (or seeds from `DEFAULT_CONTENT`) the incoming one, so
+each tab keeps its own content. `setKind()`'s root carry-over is gone — deliberate, now served by
+the bridges (TICKET-027). Tuning, `win`, `labelMode` and `display` stay app-global. `loadFavorite()`
+parks the current content, then sets `tab = content.kind` before writing, so a favorite lands in the
+tab that owns it. No carry-over test existed to update; the `App.test.ts` smoke test still passes
+(80 tests green, typecheck clean).

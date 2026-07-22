@@ -35,8 +35,19 @@
     usableAnchors,
   } from './lib/view';
 
+  type Tab = Content['kind'];
+  const DEFAULT_CONTENT: Record<Tab, Content> = {
+    scale: { kind: 'scale', root: 'C', scale: 'Major (Ionian)', degree: null },
+    chord: { kind: 'chord', slots: [{ root: 'C', type: 'major' }] },
+    arpeggio: { kind: 'arpeggio', root: 'C', chord: 'maj7' },
+  };
+  const TABS: Tab[] = ['scale', 'chord', 'arpeggio'];
+
   let tuning = $state<Tuning>(structuredClone(PRESET_TUNINGS[0]));
-  let content = $state<Content>({ kind: 'scale', root: 'C', scale: 'Major (Ionian)', degree: null });
+  let tab = $state<Tab>('scale');
+  let content = $state<Content>(structuredClone(DEFAULT_CONTENT.scale));
+  // Inactive tabs park their content here; the active tab's lives in `content`.
+  const stash: Partial<Record<Tab, Content>> = {};
   let win = $state({ startFret: 5, width: 5 });
   let labelMode = $state<LabelMode>('names');
   // Default to the position: the whole neck at once is the reference view, not
@@ -101,13 +112,14 @@
   /** Changing what is shown invalidates which shape or root you were on. */
   const resetStep = () => (display.anchor = 0);
 
-  /** Switching content type carries the root across rather than resetting it. */
-  function setKind(kind: Content['kind']) {
-    if (kind === content.kind) return;
-    content =
-      kind === 'scale' ? { kind, root, scale: 'Major (Ionian)', degree: null }
-      : kind === 'arpeggio' ? { kind, root, chord: 'maj7' }
-      : { kind, slots: [{ root, type: 'major' }] };
+  /** Each tab remembers its own content; a plain switch never carries the root
+   *  across (the bridges do that, TICKET-027). Tuning and the display controls
+   *  stay app-global. */
+  function switchTab(next: Tab) {
+    if (next === tab) return;
+    stash[tab] = content;
+    content = stash[next] ?? structuredClone(DEFAULT_CONTENT[next]);
+    tab = next;
   }
 
   /** Selecting the same degree again clears it, back to the plain scale (§7). */
@@ -146,7 +158,12 @@
 
   function loadFavorite(f: Favorite) {
     tuning = structuredClone($state.snapshot(f.tuning));
-    content = structuredClone($state.snapshot(f.content));
+    const c = structuredClone($state.snapshot(f.content)) as Content;
+    // A favorite loads into the tab that owns its kind, so it lands somewhere the
+    // player can see rather than writing into a hidden tab (spec §7).
+    stash[tab] = content;
+    tab = c.kind;
+    content = c;
     win = { ...f.window };
     labelMode = f.labelMode;
     display = { ...(f.display ?? { mode: 'position', octaves: 1, anchor: 0 }) };
@@ -172,15 +189,14 @@
   <p>Scale, chord and arpeggio shapes in any tuning — computed, never authored.</p>
 </header>
 
+<div class="tabs" role="tablist" aria-label="View">
+  {#each TABS as t}
+    <button role="tab" aria-selected={tab === t} onclick={() => switchTab(t)}>{t}</button>
+  {/each}
+</div>
+
 <main>
   <aside>
-    <h3>Content</h3>
-    <div class="seg" role="group" aria-label="Content type">
-      {#each ['scale', 'chord', 'arpeggio'] as const as kind}
-        <button aria-pressed={content.kind === kind} onclick={() => setKind(kind)}>{kind}</button>
-      {/each}
-    </div>
-
     {#if content.kind === 'scale'}
       <div class="row">
         <select bind:value={content.root} aria-label="Root note" onchange={resetStep}>
@@ -378,7 +394,13 @@
 
   /* The neck grows into the space up to 1920; past that the whole page centres
      rather than stretching. */
-  header, main { max-width: 1920px; margin: 0 auto; }
+  header, .tabs, main { max-width: 1920px; margin: 0 auto; }
+
+  .tabs { display: flex; gap: 4px; padding: 8px 24px 0; }
+  .tabs button { text-transform: capitalize; padding: 7px 16px; }
+  .tabs button[aria-selected='true'] {
+    background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700;
+  }
   main { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 20px; padding: 16px 24px 60px; align-items: start; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
