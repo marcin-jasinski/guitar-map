@@ -1,12 +1,19 @@
 import { expect, test } from 'vitest';
+import { CHORDS, PRESET_TUNINGS, notePc } from './theory';
 import {
   PRESET_PROGRESSIONS,
   chordRoot,
   chordSymbolOf,
+  guideCells,
+  guideMove,
+  guideVoices,
   inferParent,
+  keyShift,
   numeralOf,
   parseChord,
   scaleKeyOf,
+  shiftPins,
+  solveChain,
   type Chord,
   type Key,
   type Progression,
@@ -147,6 +154,68 @@ test('an unsupported suffix parses to null (the caller warns, stores nothing)', 
   expect(parseChord(C_MAJ, 'C13')).toBeNull();
   expect(parseChord(C_MAJ, 'G7♯9')).toBeNull();
   expect(parseChord(C_MAJ, 'Fm6/9')).toBeNull();
+});
+
+// ---- voicing chain (spec §5, TICKET-024) ----------------------------------------
+
+const STD = PRESET_TUNINGS[0];
+
+test('guide voices resolve for all 16 qualities by the priority rule', () => {
+  const g = (q: Chord['quality']) => guideVoices(C_MAJ, { degree: 1, quality: q });
+  expect(g('major')).toHaveLength(2); // 3rd, then 5th (no 7th)
+  expect(g('maj7')).toEqual([notePc('E'), notePc('B')]); // 3rd, 7th
+  // sus4 has no 3rd at all → 5th + root, never nothing.
+  expect(g('sus4')).toEqual([notePc('G'), notePc('C')]);
+  expect(g('sus2')).toEqual([notePc('G'), notePc('C')]);
+  for (const q of Object.keys(CHORDS) as Chord['quality'][]) {
+    expect(guideVoices(C_MAJ, { degree: 1, quality: q }).length).toBeGreaterThanOrEqual(2);
+  }
+});
+
+test('the chain resolves ii–V–I smoothly — every guide voice sounds, movement stays tiny', () => {
+  const prog: Progression = {
+    key: C_MAJ,
+    chords: [{ degree: 2, quality: 'min7' }, { degree: 5, quality: 'dom7' }, { degree: 1, quality: 'maj7' }],
+  };
+  const v = solveChain(prog, STD);
+  expect(v).toHaveLength(3);
+  // Every candidate that survives the filter sounds both guide voices — no line
+  // is left without an anchor (§5).
+  v.forEach((voicing, i) => {
+    expect(guideCells(STD, voicing.frets, guideVoices(prog.key, prog.chords[i])).every((c) => c !== null)).toBe(true);
+  });
+  // 7th-falls-to-3rd and its neighbour emerge from minimising: each change moves the
+  // guide voices barely at all.
+  const total = guideMove(STD, v[0].frets, guideVoices(prog.key, prog.chords[0]), v[1].frets, guideVoices(prog.key, prog.chords[1]))
+    + guideMove(STD, v[1].frets, guideVoices(prog.key, prog.chords[1]), v[2].frets, guideVoices(prog.key, prog.chords[2]));
+  expect(total).toBeLessThanOrEqual(3);
+});
+
+test('a pin is a fixed column — the chain honours it and echoes pinned', () => {
+  const pin = [null, null, 10, 9, 8, 8] as (number | null)[];
+  const prog: Progression = {
+    key: C_MAJ,
+    chords: [{ degree: 2, quality: 'min7' }, { degree: 5, quality: 'dom7', pin }, { degree: 1, quality: 'maj7' }],
+  };
+  const v = solveChain(prog, STD);
+  expect(v[1].frets).toEqual(pin);
+  expect(v.map((x) => x.pinned)).toEqual([false, true, false]);
+});
+
+test('pins transpose by the nearest signed interval, rescued by ±12', () => {
+  expect(keyShift('C', 'B')).toBe(-1); // not +11
+  // −1 takes fret 0 below the nut, but the +12 octave retry rescues the whole shape.
+  const prog: Progression = { key: { root: 'C', tonality: 'major' }, chords: [{ degree: 1, quality: 'major', pin: [null, null, 0, 2, 1, 0] }] };
+  expect(shiftPins(prog, keyShift('C', 'B'), STD)).toEqual([]);
+  // shift −1 fails at the nut, so the +12 retry applies: net +11.
+  expect(prog.chords[0].pin).toEqual([null, null, 11, 13, 12, 11]);
+});
+
+test('a pin too wide to octave-shift drops to auto with its index reported', () => {
+  // Span 19 frets: no single octave shift keeps both ends on the neck.
+  const prog: Progression = { key: { root: 'C', tonality: 'major' }, chords: [{ degree: 1, quality: 'major', pin: [1, null, null, null, null, 20] }] };
+  expect(shiftPins(prog, -2, STD)).toEqual([0]);
+  expect(prog.chords[0].pin).toBeUndefined();
 });
 
 test('scaleKeyOf inverts the modal display map', () => {

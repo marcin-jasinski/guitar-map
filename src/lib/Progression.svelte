@@ -13,11 +13,17 @@
     PRESET_PROGRESSIONS,
     PROG_CAP,
     SUPPORTED_SUFFIXES,
+    awkwardTransitions,
+    chordCandidates,
     chordSymbolOf,
     inferParent,
+    keyShift,
     numeralOf,
     parseChord,
     progressionDots,
+    shiftPins,
+    solveChain,
+    voicingReadout,
     type Chord,
     type Preset,
     type Tonality,
@@ -32,6 +38,15 @@
   let advice = $derived(inferParent(prog));
   let swaps = $derived(advice?.exceptions.get(prog.step) ?? []);
   let dots = $derived(progressionDots(prog.key, current, advice, prog.step));
+
+  // The voicing chain — never drawn as a shape, only read out; it is the frame
+  // the guide-tone line hangs on (§5).
+  let voicings = $derived(solveChain(prog, tuning));
+  let currentVoicing = $derived(voicings[prog.step]);
+  let cands = $derived(current ? chordCandidates(tuning, prog.key, current) : []);
+  const sameFrets = (a: (number | null)[], b: (number | null)[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+  let shapeIndex = $derived(currentVoicing ? cands.findIndex((c) => sameFrets(c, currentVoicing.frets)) : -1);
+  let awkward = $derived(awkwardTransitions(prog, tuning, voicings));
   // §4.7: reuse board()'s 'whole' branch verbatim — it lights every cell whose
   // pitch class is in `dots`. The window is ignored in whole mode.
   let neck = $derived(
@@ -65,6 +80,28 @@
   let editing = $state(false);
   let symbolInput = $state('');
   let warn = $state('');
+  let pinWarn = $state('');
+
+  // ---- override stepper & key transposition (TICKET-024) ------------------------
+  const setPin = (frets: (number | null)[]) =>
+    (prog.chords = prog.chords.map((ch, k) => (k === prog.step ? { ...ch, pin: [...frets] } : ch)));
+  const clearPin = () => (prog.chords = prog.chords.map((ch, k) => (k === prog.step ? { ...ch, pin: undefined } : ch)));
+
+  function stepShape(d: number) {
+    if (!cands.length) return;
+    const i = shapeIndex < 0 ? 0 : shapeIndex;
+    setPin(cands[Math.max(0, Math.min(cands.length - 1, i + d))]);
+  }
+
+  /** Changing the root transposes pinned overrides by the nearest signed interval;
+   *  ones that can't survive drop with a soft note (§5). */
+  function changeRoot(next: string) {
+    const dropped = shiftPins(prog, keyShift(prog.key.root, next), tuning);
+    prog.key.root = next;
+    pinWarn = dropped.length
+      ? `Overrides on ${dropped.map((i) => chordSymbolOf(prog.key, prog.chords[i])).join(', ')} reverted to auto — they couldn't move with the key.`
+      : '';
+  }
 
   function move(i: number, d: number) {
     const j = i + d;
@@ -190,7 +227,7 @@
 
   <h3>Key</h3>
   <div class="row">
-    <select bind:value={prog.key.root} aria-label="Key root">
+    <select value={prog.key.root} onchange={(e) => changeRoot(e.currentTarget.value)} aria-label="Key root">
       {#each ROOTS as r}<option value={r}>{r}</option>{/each}
     </select>
   </div>
@@ -226,6 +263,21 @@
     {/if}
   </p>
 
+  <!-- The voicing is never drawn; it surfaces only as a readout, doubling as the
+       override stepper (§5). -->
+  {#if currentVoicing}
+    <div class="voicing">
+      <span class="readout">{voicingReadout(currentVoicing.frets)}</span>
+      <button class="x" onclick={() => stepShape(-1)} disabled={shapeIndex <= 0} aria-label="Lower voicing">◄</button>
+      <span class="shape">
+        {#if cands.length}Shape {(shapeIndex < 0 ? 0 : shapeIndex) + 1} of {cands.length}{/if}
+        {#if currentVoicing.pinned}· pinned{/if}
+      </span>
+      <button class="x" onclick={() => stepShape(1)} disabled={shapeIndex >= 0 && shapeIndex >= cands.length - 1} aria-label="Higher voicing">►</button>
+      {#if currentVoicing.pinned}<button class="x" onclick={clearPin}>Clear</button>{/if}
+    </div>
+  {/if}
+
   <!-- Swaps are sentences, so they sit under the neck, not in the rail (§4.2). -->
   {#if swaps.length}
     <ul class="swaps">
@@ -237,6 +289,12 @@
   {#if advice?.strained}
     <p class="warn">Over half these chords need an exception — the parent scale is a loose fit here.</p>
   {/if}
+  {#if awkward.length}
+    <p class="warn">
+      A wide reach on this tuning: {awkward.map((i) => `${chordSymbolOf(prog.key, prog.chords[i])} → ${chordSymbolOf(prog.key, prog.chords[i + 1])}`).join(', ')}.
+    </p>
+  {/if}
+  {#if pinWarn}<p class="warn">{pinWarn}</p>{/if}
 </section>
 
 <style>
@@ -257,6 +315,10 @@
   .entry.on span { color: inherit; }
   .entry em { flex-basis: 100%; font-size: 0.68rem; font-style: normal; color: var(--muted); }
   .entry.on em { color: inherit; }
+
+  .voicing { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .voicing .readout { font-family: var(--font-mono); font-size: 0.9rem; letter-spacing: 0.04em; }
+  .voicing .shape { font-size: 0.74rem; color: var(--muted); min-width: 8em; text-align: center; }
 
   .swaps { list-style: none; padding: 0; margin: 8px 0 0; font-size: 0.8rem; }
   .swaps li { margin-top: 2px; }

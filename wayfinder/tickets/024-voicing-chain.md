@@ -2,8 +2,8 @@
 id: TICKET-024
 title: Smooth voicing chain and override stepper
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: [TICKET-020]
 map: MAP-002
 ---
@@ -87,3 +87,20 @@ soft line names that change as awkward on this tuning.
 
 Not blocked by TICKET-023: the pin lives on the chord, so the editor's add / remove / reorder need
 no cooperation from the chain. The two can land in either order.
+
+## Resolution
+
+`solveChain(prog, tuning)` in [`progression.ts`](../../src/lib/progression.ts) runs one global
+Viterbi pass: `guideVoices()` picks the two guide pcs by the 3rd→7th→5th→root→other priority (all 16
+qualities, sus2/sus4 → 5th+root); `chordCandidates()` flattens `chordVoicings()`'s Boards to fret
+arrays and filters out any that don't sound both guide voices (fallback: keep all). The transition
+cost is guide-voice fret movement × 100 + hand travel, so movement dominates and ties break on
+travel; a `Chord.pin` is a fixed single-candidate column so the whole chain re-solves. `Voicing.pinned`
+echoes `chord.pin`. The pass is linear — the last→first wrap is drawn but never scored.
+`voicingReadout()`, `keyShift()` (nearest signed), `shiftPins()` (retry ±12, drop unsurvivable and
+report indices) and `awkwardTransitions()` (>5-fret moves) round out the surface.
+[`Progression.svelte`](../../src/lib/Progression.svelte) shows the `x-3-5-5-4-3` readout with a
+◄ Shape n of m ► stepper that pins, a Clear that reverts to auto, transposes pins on a root change
+with a soft note, and warns on awkward stretches. Self-checks: guide voices for all qualities,
+ii–V–I solving with tiny movement and every voice anchored, a pin honoured as a fixed column, and pin
+transposition (±12 rescue + wide-span drop). 101 tests green, typecheck clean.
