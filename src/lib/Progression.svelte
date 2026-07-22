@@ -60,6 +60,10 @@
   // so they are never saved and reset on each session (§4.2, §6).
   let layers = $state<Layers>({ ...ALL_LAYERS });
 
+  // The window is ignored in whole mode, but board()/Fretboard still want one.
+  const WIN = { startFret: 0, width: 5 };
+  const noop = () => {};
+
   let current = $derived(prog.chords[prog.step]);
   // The next chord wraps; on a one-chord progression there is none, so the three
   // forward layers draw nothing (§4.3, §4.6).
@@ -92,11 +96,8 @@
   // §4.7: reuse board()'s 'whole' branch verbatim — it lights every cell whose
   // pitch class is in `dots`. The window is ignored in whole mode.
   let neck = $derived(
-    board(tuning, { startFret: 0, width: 5 }, content, dots, { mode: 'whole', octaves: 1, anchor: 0 }),
+    board(tuning, WIN, content, dots, { mode: 'whole', octaves: 1, anchor: 0 }),
   );
-
-  const WIN = { startFret: 0, width: 5 };
-  const noop = () => {};
 
   /** Stepping wraps — the progression is a loop (§4.3). */
   function nudge(d: number) {

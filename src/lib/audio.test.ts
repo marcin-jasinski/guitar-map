@@ -8,15 +8,15 @@ import { freq } from './theory';
  * timings can't silently drift when the synth was swapped for samples (TICKET-028).
  */
 function stub() {
-  const calls: { note: number; dur: number; time: number }[] = [];
-  const sampler: Sampler = { triggerAttackRelease: (note, dur, time) => calls.push({ note, dur, time }) };
+  const calls: { hz: number; dur: number; time: number }[] = [];
+  const sampler: Sampler = { triggerAttackRelease: (hz, dur, time) => calls.push({ hz, dur, time }) };
   return { sampler, calls };
 }
 
 test('a single note plays at its true pitch, now, ringing 1.4s', () => {
   const { sampler, calls } = stub();
   scheduleNote(sampler, 100, 69); // MIDI 69 = A4 = 440 Hz
-  expect(calls).toEqual([{ note: 440, dur: 1.4, time: 100 }]);
+  expect(calls).toEqual([{ hz: 440, dur: 1.4, time: 100 }]);
 });
 
 test('a strum staggers low→high by 0.045s and keeps true per-tuning pitch', () => {
@@ -24,7 +24,7 @@ test('a strum staggers low→high by 0.045s and keeps true per-tuning pitch', ()
   const midis = [40, 45, 50]; // E2 A2 D3, e.g. a drop/7-string low run
   scheduleStrum(sampler, 10, midis);
   expect(calls.map((c) => c.time)).toEqual([10, 10.045, 10.09]);
-  expect(calls.map((c) => c.note)).toEqual(midis.map(freq));
+  expect(calls.map((c) => c.hz)).toEqual(midis.map(freq));
   expect(calls.every((c) => c.dur === 1.4)).toBe(true);
 });
 

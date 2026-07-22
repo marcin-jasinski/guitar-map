@@ -74,7 +74,7 @@ $effect.root(() => {
 });
 
 /** `C major · I – iv – V7/V – V7`, truncating past four chords with `…` (§7). */
-function describeProgression(c: Extract<Content, { kind: 'progression' }>): string {
+function describeProgression(c: ProgressionContent): string {
   const nums = c.chords.map((ch) => numeralOf(c.key, ch));
   const shown = nums.slice(0, 4).join(' – ') + (nums.length > 4 ? ' …' : '');
   return `${c.key.root} ${c.key.tonality}${nums.length ? ` · ${shown}` : ''}`;

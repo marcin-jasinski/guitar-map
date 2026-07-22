@@ -31,8 +31,9 @@ const NOTE_DUR = 1.4;
 const STRUM_STAGGER = 0.045;
 const SEQUENCE_RING = 1.6;
 
-/** The slice of `Tone.Sampler` this module uses. */
-export type Sampler = { triggerAttackRelease(note: number, dur: number, time: number): void };
+/** The slice of `Tone.Sampler` this module uses. `hz` is a frequency, not a note
+ *  name — `Tone.Sampler.triggerAttackRelease` accepts either, and we hand it Hz. */
+export type Sampler = { triggerAttackRelease(hz: number, dur: number, time: number): void };
 
 // ---- pure scheduling (testable against a stubbed sampler) ----------------------
 // `freq(midi)` (Hz) is passed straight through, so the true per-tuning MIDI number

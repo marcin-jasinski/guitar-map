@@ -91,11 +91,7 @@
   );
   let activeLabel = $derived(effectiveLabelMode(content, labelMode));
   let triads = $derived(content.kind === 'scale' ? diatonicTriads(content.root, content.scale) : []);
-  let root = $derived(
-    content.kind === 'chord' ? content.slots[0].root
-    : content.kind === 'progression' ? content.key.root
-    : content.root,
-  );
+  let root = $derived(contentRoot(content));
   let slots = $derived(content.kind === 'chord' ? content.slots : []);
 
   // The window clamps to the neck; near an edge the clicked fret stays inside it
