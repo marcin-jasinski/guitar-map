@@ -5,6 +5,7 @@ import {
   chordSymbolOf,
   inferParent,
   numeralOf,
+  parseChord,
   scaleKeyOf,
   type Chord,
   type Key,
@@ -118,6 +119,34 @@ test('presets render the numerals the spec table lists, in the right tonality', 
   expect(numerals('Minor ii–V–i')).toBe('iim7♭5 V7 i');
   expect(PRESET_PROGRESSIONS.find((x) => x.name === '12-bar blues')!.chords).toHaveLength(12);
   expect(PRESET_PROGRESSIONS).toHaveLength(10);
+});
+
+// ---- typed-symbol back-analysis (spec §1, TICKET-023) ---------------------------
+
+test('the typed letter picks the degree — C♯ is ♯I, D♭ is ♭II in C major', () => {
+  expect(parseChord(C_MAJ, 'C♯')).toEqual({ degree: 1, quality: 'major', alter: 1 });
+  expect(parseChord(C_MAJ, 'D♭')).toEqual({ degree: 2, quality: 'major', alter: -1 });
+  // ASCII accidentals are accepted too.
+  expect(parseChord(C_MAJ, 'C#')).toEqual({ degree: 1, quality: 'major', alter: 1 });
+});
+
+test('back-analysis round-trips through the symbol', () => {
+  const cases: Chord[] = [
+    { degree: 2, quality: 'min7' },
+    { degree: 5, quality: 'dom7' },
+    { degree: 7, quality: 'major', alter: -1 },
+    { degree: 2, quality: 'm7♭5' },
+    { degree: 1, quality: 'maj7' },
+  ];
+  for (const ch of cases) {
+    expect(parseChord(C_MAJ, chordSymbolOf(C_MAJ, ch))).toEqual(ch);
+  }
+});
+
+test('an unsupported suffix parses to null (the caller warns, stores nothing)', () => {
+  expect(parseChord(C_MAJ, 'C13')).toBeNull();
+  expect(parseChord(C_MAJ, 'G7♯9')).toBeNull();
+  expect(parseChord(C_MAJ, 'Fm6/9')).toBeNull();
 });
 
 test('scaleKeyOf inverts the modal display map', () => {

@@ -2,8 +2,8 @@
 id: TICKET-023
 title: Progression editor
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: [TICKET-020]
 map: MAP-002
 ---
@@ -46,3 +46,17 @@ chord's `pin` and nothing else.
 ## Blocked by
 
 - TICKET-020 — the progression model and the tab
+
+## Resolution
+
+An `Edit progression` toggle under the rail in [`Progression.svelte`](../../src/lib/Progression.svelte)
+reveals per-chord controls: degree, accidental, quality and `of`-target selects, plus ↑/↓ reorder and
+✕ remove. `edit()` spreads a patch and clears that chord's `pin` (only degree/alter/quality/of edits
+do); `move()` and `remove()` keep pins because a pin lives on the chord object it travels with, and
+both fix up `prog.step`. A "Add by symbol" input calls `parseChord()` (new in
+[`progression.ts`](../../src/lib/progression.ts)): the typed letter picks the degree (C♯ → ♯I,
+D♭ → ♭II), the accidental sets `alter`, and the suffix must match a shipped `CHORDS` suffix (ASCII
+`#`/`b` and `dim`/`aug` aliases accepted). Unsupported suffixes return null → a soft `--warn` line
+naming `SUPPORTED_SUFFIXES`, storing nothing. Both add paths honour the 32-chord cap. Self-checks
+cover the C♯/D♭ case, a symbol round-trip, and the unsupported `C13`/`G7♯9`/`Fm6/9` rejections.
+96 tests green, typecheck clean.

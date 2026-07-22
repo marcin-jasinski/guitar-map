@@ -12,15 +12,17 @@
   import {
     PRESET_PROGRESSIONS,
     PROG_CAP,
+    SUPPORTED_SUFFIXES,
     chordSymbolOf,
     inferParent,
     numeralOf,
+    parseChord,
     progressionDots,
     type Chord,
     type Preset,
     type Tonality,
   } from './progression';
-  import { board } from './view';
+  import { board, chordTypes } from './view';
 
   let { content = $bindable(), tuning }: { content: Content; tuning: Tuning } = $props();
   // Only rendered when the active tab is the progression, so the cast always holds.
@@ -57,6 +59,43 @@
     prog.key.tonality = p.tonality;
     prog.chords = structuredClone(p.chords);
     prog.step = 0;
+  }
+
+  // ---- editor (TICKET-023) ------------------------------------------------------
+  let editing = $state(false);
+  let symbolInput = $state('');
+  let warn = $state('');
+
+  function move(i: number, d: number) {
+    const j = i + d;
+    if (j < 0 || j >= prog.chords.length) return;
+    const chords = [...prog.chords];
+    [chords[i], chords[j]] = [chords[j], chords[i]]; // a pin rides with its chord
+    prog.chords = chords;
+    if (prog.step === i) prog.step = j;
+    else if (prog.step === j) prog.step = i;
+  }
+
+  function remove(i: number) {
+    prog.chords = prog.chords.filter((_, k) => k !== i);
+    if (prog.step >= prog.chords.length) prog.step = Math.max(0, prog.chords.length - 1);
+  }
+
+  /** Editing a chord clears only that chord's pin (§5); reorder/remove keep it. */
+  const edit = (i: number, patch: Partial<Chord>) =>
+    (prog.chords = prog.chords.map((ch, k) => (k === i ? { ...ch, ...patch, pin: undefined } : ch)));
+
+  function addBySymbol() {
+    const ch = parseChord(prog.key, symbolInput);
+    if (!ch) {
+      warn = `"${symbolInput.trim()}" isn't supported. Try a root plus one of: ${SUPPORTED_SUFFIXES}.`;
+      return;
+    }
+    if (prog.chords.length >= PROG_CAP) return;
+    prog.chords = [...prog.chords, ch];
+    prog.step = prog.chords.length - 1;
+    symbolInput = '';
+    warn = '';
   }
 </script>
 
@@ -97,6 +136,34 @@
           <span>{chordSymbolOf(prog.key, ch)}</span>
           {#if advice?.labels[i]}<em>{advice.labels[i]}</em>{/if}
         </button>
+        {#if editing}
+          <div class="edit">
+            <select value={ch.degree} onchange={(e) => edit(i, { degree: +e.currentTarget.value })} aria-label="Degree">
+              {#each [1, 2, 3, 4, 5, 6, 7] as d}<option value={d}>{d}</option>{/each}
+            </select>
+            <select
+              value={ch.alter ?? 0}
+              onchange={(e) => edit(i, { alter: +e.currentTarget.value === 0 ? undefined : (+e.currentTarget.value as -1 | 1) })}
+              aria-label="Accidental"
+            >
+              <option value={-1}>♭</option><option value={0}>♮</option><option value={1}>♯</option>
+            </select>
+            <select value={ch.quality} onchange={(e) => edit(i, { quality: e.currentTarget.value as Chord['quality'] })} aria-label="Quality">
+              {#each chordTypes as q}<option value={q}>{q}</option>{/each}
+            </select>
+            <select
+              value={ch.of?.degree ?? 0}
+              onchange={(e) => edit(i, { of: +e.currentTarget.value ? { degree: +e.currentTarget.value } : undefined })}
+              aria-label="Secondary target"
+            >
+              <option value={0}>/—</option>
+              {#each [1, 2, 3, 4, 5, 6, 7] as d}<option value={d}>/{d}</option>{/each}
+            </select>
+            <button class="x" onclick={() => move(i, -1)} disabled={i === 0} aria-label="Move up">↑</button>
+            <button class="x" onclick={() => move(i, 1)} disabled={i === prog.chords.length - 1} aria-label="Move down">↓</button>
+            <button class="x" onclick={() => remove(i)} aria-label="Remove chord">✕</button>
+          </div>
+        {/if}
       </li>
     {/each}
     <li>
@@ -105,6 +172,21 @@
       </button>
     </li>
   </ol>
+
+  <button class="wide" onclick={() => (editing = !editing)}>{editing ? 'Done' : 'Edit progression'}</button>
+  {#if editing}
+    <div class="row">
+      <input
+        class="symbol"
+        placeholder="Add by symbol, e.g. Dm7"
+        bind:value={symbolInput}
+        onkeydown={(e) => e.key === 'Enter' && addBySymbol()}
+        aria-label="Add chord by symbol"
+      />
+      <button class="x" onclick={addBySymbol} disabled={prog.chords.length >= PROG_CAP} aria-label="Add typed chord">＋</button>
+    </div>
+    {#if warn}<p class="warn">{warn}</p>{/if}
+  {/if}
 
   <h3>Key</h3>
   <div class="row">
@@ -181,6 +263,12 @@
   .swaps b { color: var(--warn); font-family: var(--font-mono); }
   .swaps .deg { color: var(--muted); font-family: var(--font-mono); font-size: 0.74rem; }
   .add { width: 100%; color: var(--muted); }
+  .wide { width: 100%; margin-top: 8px; }
+  .symbol { flex: 1; min-width: 0; margin-top: 0; }
+
+  .edit { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px 0 2px; }
+  .edit select { width: auto; flex: 1 1 auto; min-width: 0; margin-top: 0; padding: 3px 4px; font-size: 0.72rem; }
+  .edit .x { padding: 3px 6px; }
   .seg { display: flex; gap: 4px; margin-top: 6px; }
   .seg button { flex: 1; text-transform: capitalize; }
   .hint { color: var(--muted); font-size: 0.78rem; margin: 8px 0 0; }

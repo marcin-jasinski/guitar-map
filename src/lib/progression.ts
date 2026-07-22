@@ -215,6 +215,38 @@ export function inferParent(prog: Progression): ParentAdvice | null {
   };
 }
 
+// ---- typed-symbol back-analysis (spec §1, TICKET-023) --------------------------
+
+const wrap12 = (n: number) => mod(n + 6, 12) - 6;
+const norm = (s: string) => s.replace(/#/g, '♯').replace(/b/g, '♭');
+
+/** Human-readable list of what a typed symbol may end with, for the soft warning. */
+export const SUPPORTED_SUFFIXES = Object.values(CHORDS)
+  .map((f) => f.suffix || 'major')
+  .join(', ');
+
+/**
+ * Back-analyse a typed chord symbol to a numeral (§1): the typed letter picks the
+ * degree (so in C major `C♯` is ♯I and `D♭` is ♭II), the accidental sets `alter`,
+ * and the suffix must match a shipped `CHORDS` suffix. Returns null for anything
+ * outside the vocabulary — the caller warns softly and stores nothing.
+ */
+export function parseChord(key: Key, text: string): Chord | null {
+  const m = text.trim().match(/^([A-Ga-g])([#♯b♭𝄪𝄫]*)(.*)$/);
+  if (!m) return null;
+  const rootName = m[1].toUpperCase() + norm(m[2]);
+  const suffix = norm(m[3]).trim().replace(/^dim7$/, '°7').replace(/^dim$/, '°').replace(/^aug$/, '+');
+  const entry = Object.entries(CHORDS).find(([, f]) => f.suffix === suffix);
+  if (!entry) return null;
+
+  const ls = mod(LETTERS.indexOf(rootName[0]) - LETTERS.indexOf(key.root[0]), 7);
+  const diatonicPc = mod(notePc(key.root) + degSemis(key.tonality)[ls], 12);
+  const alter = wrap12(notePc(rootName) - diatonicPc);
+  if (Math.abs(alter) > 1) return null; // double accidentals are outside the ±1 vocabulary
+  const quality = entry[0] as Chord['quality'];
+  return alter === 0 ? { degree: ls + 1, quality } : { degree: ls + 1, quality, alter: alter as -1 | 1 };
+}
+
 // ---- neck rendering (spec §4.4, §4.7) ------------------------------------------
 
 /**
