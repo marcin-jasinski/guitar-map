@@ -18,6 +18,7 @@
     SUPPORTED_SUFFIXES,
     awkwardTransitions,
     chordCandidates,
+    chordRoot,
     chordSymbolOf,
     guideCells,
     guideVoices,
@@ -41,11 +42,13 @@
     tuning = $bindable(),
     snapshot,
     onLoad,
+    onBridge,
   }: {
     content: Content;
     tuning: Tuning;
     snapshot: () => Omit<Favorite, 'id' | 'name'>;
     onLoad: (f: Favorite) => void;
+    onBridge: (c: Content) => void;
   } = $props();
   // Only rendered when the active tab is the progression, so the cast always holds.
   let prog = $derived(content as ProgressionContent);
@@ -107,6 +110,13 @@
     prog.chords = [...prog.chords, { degree: 1, quality: 'major' } satisfies Chord];
     prog.step = prog.chords.length - 1;
   }
+
+  // ---- bridges to other tabs (TICKET-027) --------------------------------------
+  // "Play this chord" is per-chord → Chord tab, stripped of context (§8).
+  const playChord = (ch: Chord) => onBridge({ kind: 'chord', slots: [{ root: chordRoot(prog.key, ch), type: ch.quality }] });
+  // "Solo on <parent>" is progression-level → Scale tab. The label reads the modal
+  // name but the content stores the real SCALES key (§8) — `advice.scaleKey` already is it.
+  const soloParent = () => advice && onBridge({ kind: 'scale', root: prog.key.root, scale: advice.scaleKey, degree: null });
 
   /** Loading a preset keeps the current root and switches only the tonality (§2). */
   function loadPreset(p: Preset) {
@@ -218,11 +228,14 @@
   <ol class="rail">
     {#each prog.chords as ch, i}
       <li>
-        <button class="entry" class:on={i === prog.step} onclick={() => (prog.step = i)}>
-          <b>{numeralOf(prog.key, ch)}</b>
-          <span>{chordSymbolOf(prog.key, ch)}</span>
-          {#if advice?.labels[i]}<em>{advice.labels[i]}</em>{/if}
-        </button>
+        <div class="entryrow">
+          <button class="entry" class:on={i === prog.step} onclick={() => (prog.step = i)}>
+            <b>{numeralOf(prog.key, ch)}</b>
+            <span>{chordSymbolOf(prog.key, ch)}</span>
+            {#if advice?.labels[i]}<em>{advice.labels[i]}</em>{/if}
+          </button>
+          <button class="x play" onclick={() => playChord(ch)} aria-label="Play {chordSymbolOf(prog.key, ch)} in the Chord tab">▶</button>
+        </div>
         {#if editing}
           <div class="edit">
             <select value={ch.degree} onchange={(e) => edit(i, { degree: +e.currentTarget.value })} aria-label="Degree">
@@ -295,7 +308,14 @@
 <section>
   <!-- The parent scale is named once, above the neck — it is constant across the
        progression (§4.2). Empty progressions run no inference (§4.6). -->
-  <h2>{advice ? `parent: ${advice.name}` : 'Add a chord to begin'}</h2>
+  <h2 class="parent">
+    {#if advice}
+      parent: {advice.name}
+      <button class="solo" onclick={soloParent} aria-label="Solo on {advice.name} in the Scale tab">♪ Solo on {advice.name}</button>
+    {:else}
+      Add a chord to begin
+    {/if}
+  </h2>
   <Fretboard
     {tuning}
     {dots}
@@ -365,10 +385,14 @@
   aside { background: var(--panel); border: 1px solid var(--hair); border-radius: 12px; padding: 14px; }
   section { min-width: 0; }
   section h2 { font-size: 1rem; margin: 0 0 10px; font-family: var(--font-mono); }
+  .parent { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .solo { font-family: var(--font-ui); font-size: 0.74rem; padding: 3px 9px; }
 
   .rail { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 4px; }
+  .entryrow { display: flex; gap: 4px; }
+  .entryrow .play { flex: none; align-self: stretch; }
   .entry {
-    width: 100%; display: flex; align-items: baseline; gap: 8px; text-align: left;
+    flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; text-align: left;
     border-left: 3px solid transparent;
   }
   .entry.on { border-left-color: var(--accent); background: var(--accent); color: var(--accent-ink); }

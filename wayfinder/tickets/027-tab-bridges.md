@@ -2,8 +2,8 @@
 id: TICKET-027
 title: Bridges from the progression tab to Chord and Scale
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: [TICKET-021]
 map: MAP-002
 ---
@@ -50,3 +50,16 @@ notice.
 ## Blocked by
 
 - TICKET-021 — the inferred parent scale the Scale bridge carries
+
+## Resolution
+
+[`App.svelte`](../../src/App.svelte) gained `openContent(c)` — stash the current content, set
+`tab = c.kind`, write `content = c` — passed to `Progression.svelte` as `onBridge`. The rail entry's
+`▶` button bridges to the Chord tab with `{ root: chordRoot(key, ch), type: ch.quality }` (context
+stripped, §8); the `♪ Solo on <parent>` button beside the parent header bridges to the Scale tab with
+`{ root: key.root, scale: advice.scaleKey }`. Because the inference already stores the raw `SCALES`
+key in `advice.scaleKey`, the button label reads the modal name ("Solo on C Ionian") while the content
+stores `'Major (Ionian)'` — no inverse lookup needed, and a self-check pins `advice.scaleKey ===
+'Major (Ionian)'` for that case. Content is per-tab, so returning via the tab bar restores the
+progression, key and step; tuning is untouched. No Arpeggio bridge, no breadcrumb. 106 tests green,
+typecheck clean, build succeeds.

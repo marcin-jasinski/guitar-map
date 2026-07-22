@@ -139,6 +139,15 @@
     tab = next;
   }
 
+  /** A bridge (TICKET-027): set a target tab's content, then switch to it. Because
+   *  content is per-tab, the progression survives the excursion — the tab bar is the
+   *  way back. */
+  function openContent(c: Content) {
+    stash[tab] = content;
+    tab = c.kind;
+    content = c;
+  }
+
   /** Selecting the same degree again clears it, back to the plain scale (§7). */
   function selectDegree(degree: number | null) {
     if (content.kind !== 'scale') return;
@@ -219,7 +228,7 @@
 
 <main>
   {#if content.kind === 'progression'}
-    <Progression bind:content bind:tuning {snapshot} onLoad={loadFavorite} />
+    <Progression bind:content bind:tuning {snapshot} onLoad={loadFavorite} onBridge={openContent} />
   {:else}
   <aside>
     {#if content.kind === 'scale'}

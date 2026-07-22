@@ -89,6 +89,9 @@ test('I IV iv I → C Ionian, one exception A♭ for A — Ionian ties Mixolydia
   // SCALES silently flips this.
   const a = inferParent(prog(C_MAJ, [maj(1), maj(4), { degree: 4, quality: 'minor' }, maj(1)]))!;
   expect(a.name).toBe('C Ionian');
+  // The Scale bridge (TICKET-027) carries scaleKey, a real SCALES key — "Solo on C
+  // Ionian" must land on 'Major (Ionian)', not the modal label.
+  expect(a.scaleKey).toBe('Major (Ionian)');
   expect(a.exceptions.size).toBe(1);
   const [alt] = a.exceptions.get(2)!;
   expect([alt.play.name, alt.insteadOf.name]).toEqual(['A♭', 'A']);
