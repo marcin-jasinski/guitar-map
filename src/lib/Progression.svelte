@@ -10,12 +10,14 @@
   import { ROOTS, type Tuning } from './theory';
   import type { Content, ProgressionContent } from './store.svelte';
   import {
+    PRESET_PROGRESSIONS,
     PROG_CAP,
     chordSymbolOf,
     inferParent,
     numeralOf,
     progressionDots,
     type Chord,
+    type Preset,
     type Tonality,
   } from './progression';
   import { board } from './view';
@@ -49,6 +51,13 @@
     prog.chords = [...prog.chords, { degree: 1, quality: 'major' } satisfies Chord];
     prog.step = prog.chords.length - 1;
   }
+
+  /** Loading a preset keeps the current root and switches only the tonality (§2). */
+  function loadPreset(p: Preset) {
+    prog.key.tonality = p.tonality;
+    prog.chords = structuredClone(p.chords);
+    prog.step = 0;
+  }
 </script>
 
 <!-- ↑ ↓ step; they preventDefault so a step doesn't also scroll the rail (§4.3),
@@ -62,6 +71,23 @@
 />
 
 <aside>
+  <h3>Load</h3>
+  <!-- One picker; the Saved group joins here in TICKET-026. -->
+  <select
+    aria-label="Load a progression"
+    value=""
+    onchange={(e) => {
+      const p = PRESET_PROGRESSIONS.find((x) => x.name === e.currentTarget.value);
+      if (p) loadPreset(p);
+      e.currentTarget.value = '';
+    }}
+  >
+    <option value="" disabled>Load a progression…</option>
+    <optgroup label="Presets">
+      {#each PRESET_PROGRESSIONS as p}<option value={p.name}>{p.name}</option>{/each}
+    </optgroup>
+  </select>
+
   <h3>Progression</h3>
   <ol class="rail">
     {#each prog.chords as ch, i}

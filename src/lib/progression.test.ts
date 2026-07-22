@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import {
+  PRESET_PROGRESSIONS,
   chordRoot,
   chordSymbolOf,
   inferParent,
@@ -100,6 +101,23 @@ test('12-bar blues → Mixolydian, not Ionian', () => {
 
 test('empty progression runs no inference', () => {
   expect(inferParent(prog(C_MAJ, []))).toBeNull();
+});
+
+test('presets render the numerals the spec table lists, in the right tonality', () => {
+  const numerals = (name: string) => {
+    const p = PRESET_PROGRESSIONS.find((x) => x.name === name)!;
+    // Rendered against any root; the numeral is root-agnostic.
+    const key: Key = { root: 'C', tonality: p.tonality };
+    return p.chords.map((ch) => numeralOf(key, ch)).join(' ');
+  };
+  expect(numerals('ii–V–I')).toBe('iim7 V7 Imaj7');
+  expect(numerals('Mixolydian rock')).toBe('I ♭VII IV');
+  expect(numerals('Borrowed iv')).toBe('I IV iv I');
+  expect(numerals('Secondary dominant')).toBe('I V7/V V7 I');
+  expect(numerals('Andalusian cadence')).toBe('i VII VI V'); // natural-minor degrees, no flat
+  expect(numerals('Minor ii–V–i')).toBe('iim7♭5 V7 i');
+  expect(PRESET_PROGRESSIONS.find((x) => x.name === '12-bar blues')!.chords).toHaveLength(12);
+  expect(PRESET_PROGRESSIONS).toHaveLength(10);
 });
 
 test('scaleKeyOf inverts the modal display map', () => {

@@ -2,8 +2,8 @@
 id: TICKET-022
 title: Preset progression library
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: [TICKET-020]
 map: MAP-002
 ---
@@ -55,3 +55,13 @@ wins and the table is wrong.
 ## Blocked by
 
 - TICKET-020 — the progression model and the tab
+
+## Resolution
+
+`PRESET_PROGRESSIONS` (ten `Preset` objects, name + tonality + chords, no root) lives in
+[`progression.ts`](../../src/lib/progression.ts), modelled on `PRESET_TUNINGS`. A `<select>` with a
+"Presets" optgroup in [`Progression.svelte`](../../src/lib/Progression.svelte) loads one via
+`loadPreset()`, which keeps `prog.key.root` and switches only the tonality. The picker is built to
+gain a "Saved" optgroup in TICKET-026. A self-check renders each preset's stored chords through
+`numeralOf()` and asserts they equal the spec's numeral column (`iim7 V7 Imaj7`, `I ♭VII IV`,
+`i VII VI V`, …) and that the 12-bar blues stores 12 chords. 93 tests green, typecheck clean.

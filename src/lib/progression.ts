@@ -33,6 +33,36 @@ export type Progression = { key: Key; chords: Chord[] };
 /** The rail stays usable; nothing is invalid below this (§1). */
 export const PROG_CAP = 32;
 
+/** A curated progression, key-agnostic — its numerals are written against a
+ *  tonality, not a root (§2). */
+export type Preset = { name: string; tonality: Tonality; chords: Chord[] };
+
+// Compact builders so the table below reads like its numeral column.
+const c = (degree: number, quality: Chord['quality'], extra: Partial<Chord> = {}): Chord =>
+  ({ degree, quality, ...extra });
+const I7 = c(1, 'dom7');
+const IV7 = c(4, 'dom7');
+const V7 = c(5, 'dom7');
+
+/**
+ * Ten presets, one flat list, name only — modelled on `PRESET_TUNINGS` (§2). No
+ * root: loading keeps the player's current root and switches only tonality. The
+ * numerals each name are exactly what `numeralOf()` produces; the six after the
+ * classics exist to prove the inference and the exceptions on load.
+ */
+export const PRESET_PROGRESSIONS: Preset[] = [
+  { name: 'I–V–vi–IV', tonality: 'major', chords: [c(1, 'major'), c(5, 'major'), c(6, 'minor'), c(4, 'major')] },
+  { name: 'I–vi–IV–V', tonality: 'major', chords: [c(1, 'major'), c(6, 'minor'), c(4, 'major'), c(5, 'major')] },
+  { name: 'ii–V–I', tonality: 'major', chords: [c(2, 'min7'), V7, c(1, 'maj7')] },
+  { name: '12-bar blues', tonality: 'major', chords: [I7, I7, I7, I7, IV7, IV7, I7, I7, V7, IV7, I7, V7] },
+  { name: 'Mixolydian rock', tonality: 'major', chords: [c(1, 'major'), c(7, 'major', { alter: -1 }), c(4, 'major')] },
+  { name: 'Dorian vamp', tonality: 'minor', chords: [c(1, 'minor'), c(4, 'major')] },
+  { name: 'Borrowed iv', tonality: 'major', chords: [c(1, 'major'), c(4, 'major'), c(4, 'minor'), c(1, 'major')] },
+  { name: 'Secondary dominant', tonality: 'major', chords: [c(1, 'major'), c(5, 'dom7', { of: { degree: 5 } }), V7, c(1, 'major')] },
+  { name: 'Andalusian cadence', tonality: 'minor', chords: [c(1, 'minor'), c(7, 'major'), c(6, 'major'), c(5, 'major')] },
+  { name: 'Minor ii–V–i', tonality: 'minor', chords: [c(2, 'm7♭5'), V7, c(1, 'minor')] },
+];
+
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const MINOR = [0, 2, 3, 5, 7, 8, 10]; // natural minor (Aeolian) — VII/VI need no flat
 const NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
