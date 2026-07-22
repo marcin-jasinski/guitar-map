@@ -2,8 +2,8 @@
 id: TICKET-028
 title: Tone.js sample-based guitar tone
 label: wayfinder:task
-status: open
-assignee: null
+status: closed
+assignee: Marcin
 blocked_by: []
 map: null
 ---
@@ -78,3 +78,23 @@ file" property is lost. The load is awaited *inside*, off a module-level promise
 
 None — independent of the progression tab (MAP-002 §8: that tab has no audio), so it can land
 before, during or after TICKET-019–027.
+
+## Resolution
+
+[`audio.ts`](../../src/lib/audio.ts) now drives a `Tone.Sampler` instead of the triangle-oscillator
+pluck. `tone@15` and the samples are **dynamically imported on first sound** — the build splits `tone`
+into its own 341 kB chunk, keeping the initial bundle at ~98 kB (34 kB gzipped), and the samples load
+from `public/samples/guitar-acoustic/`. The three exports (`playNote`, `strum`, `playSequence`) keep
+their exact signatures and stay non-async: the load is awaited inside `ensureLoaded()` off a
+module-level promise, `Tone.start()` runs on the first user gesture, and notes triggered before the
+sampler is ready are dropped (not queued) via `withSampler`. The ear-tuned timings carry over
+unchanged (strum 0.045 stagger, sequence gap step, ring × 1.6) and pitches pass through `freq(midi)`
+so every tuning — 7-string and drop included — sounds true. The scheduling is factored into pure
+`scheduleNote`/`scheduleStrum`/`scheduleSequence` helpers, pinned by
+[`audio.test.ts`](../../src/lib/audio.test.ts) against a stubbed sampler (midi→Hz + the offsets), so
+the timings can't silently drift; audio itself stays untested as before.
+
+**Samples:** eight notes (D2 G2 C3 F3 A3 D4 G4 D5) from the tonejs-instruments *guitar-acoustic* set
+(Versilian VCSL), verified at source as **CC-BY 3.0** (redistribution permitted with attribution);
+the attribution ships as `public/samples/guitar-acoustic/LICENSE.md`. `Tone.Sampler` pitch-shifts the
+handful across the whole range. 109 tests green, typecheck clean, build succeeds.
