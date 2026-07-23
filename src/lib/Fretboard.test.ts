@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { render } from 'svelte/server';
 import Fretboard from './Fretboard.svelte';
 import { PRESET_TUNINGS } from './theory';
-import { board, noteMap } from './view';
+import { board, noteMap, type NeckSelection } from './view';
 import type { Content, Display } from './store.svelte';
 
 const tuning = PRESET_TUNINGS[0];
@@ -10,12 +10,12 @@ const win = { startFret: 5, width: 5 };
 const scale: Content = { kind: 'scale', root: 'C', scale: 'Major (Ionian)', degree: null };
 const chord: Content = { kind: 'chord', slots: [{ root: 'F', type: 'major' }] };
 
-const draw = (content: Content, display: Display, w = win) => {
+const draw = (content: Content, display: Display, w = win, selection: NeckSelection | null = null) => {
   const dots = noteMap(content, 'names');
   const neck = board(tuning, w, content, dots, display);
   return render(Fretboard, {
     props: {
-      tuning, dots, win: w,
+      tuning, dots, win: w, selection,
       cells: neck.cells,
       barre: neck.barre,
       ghosts: neck.ghosts,
@@ -31,8 +31,25 @@ test('whole-neck mode drops the window band and dims nothing', () => {
   const body = draw(scale, { mode: 'whole', octaves: 1, anchor: 0 });
   expect(body).not.toContain('var(--accent)" opacity=".14"');
   expect(body).not.toContain('faded');
-  expect(body).toContain('fret 0"');
+  expect(body).toContain('open string 1"');
   expect(body).toContain('fret 24"');
+});
+
+test('open strings draw as a ring, not a filled dot', () => {
+  const body = draw(scale, { mode: 'whole', octaves: 1, anchor: 0 });
+  expect(body).toContain('stroke-width="3.5"');
+  // Ringed but not dashed: an open string is played, unlike a ghost.
+  expect(body).toContain('open string 6"');
+});
+
+test('a selection frames the region it isolates', () => {
+  const body = draw(scale, { mode: 'whole', octaves: 1, anchor: 0 }, win, {
+    fromString: 1, toString: 3, fromFret: 2, toFret: 6,
+  });
+  expect(body).toContain('Clear selection');
+  // Pins the cell→pixel geometry, and with it the string axis: string 3 is nearer
+  // the top than string 1, so the box hangs off the *higher* index.
+  expect(body).toContain('x="115" y="90" width="230" height="102"');
 });
 
 test('position mode keeps the window band', () => {

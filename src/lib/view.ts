@@ -124,8 +124,27 @@ export function noteMap(content: Content, mode: LabelMode): Map<number, Dot> {
 // ---- which board positions to draw ---------------------------------------------
 
 export const cellKey = (string: number, fret: number) => `${string}:${fret}`;
+export const parseCell = (key: string) => key.split(':').map(Number) as [string: number, fret: number];
 
 const NO_GHOSTS: Map<string, number> = new Map();
+
+/** A rectangle of neck dragged out on the board; inclusive at both ends. */
+export type NeckSelection = { fromString: number; toString: number; fromFret: number; toFret: number };
+
+/** `null` selects the whole neck, so callers can pass the drawn cells straight through. */
+export function inSelection(sel: NeckSelection | null, key: string): boolean {
+  if (!sel) return true;
+  const [s, f] = parseCell(key);
+  return s >= sel.fromString && s <= sel.toString && f >= sel.fromFret && f <= sel.toFret;
+}
+
+/** Every pitch the board is currently drawing, ascending. Playback reads this
+ *  rather than the fret window, so a shape stepped up the neck sounds where it
+ *  is drawn — the window is untouched in voicing and octave modes. */
+export const cellMidis = (tuning: Tuning, cells: Set<string>) =>
+  [...cells]
+    .map((k) => fretMidi(tuning, ...parseCell(k)))
+    .sort((a, b) => a - b);
 
 /** A run of strings stopped at one fret by a single finger. */
 export type Barre = { fret: number; from: number; to: number };
@@ -222,8 +241,7 @@ export function usableAnchors(
     const top = a.midi + 12 * octaves;
     const path = octavePath(tuning, dots, a, octaves);
     for (const key of path) {
-      const [s, f] = key.split(':').map(Number);
-      if (fretMidi(tuning, s, f) === top) return true;
+      if (fretMidi(tuning, ...parseCell(key)) === top) return true;
     }
     return false;
   });
@@ -307,12 +325,7 @@ export function board(
 
 /** Chord tones with no cell sounding them, by name. */
 function missing(tuning: Tuning, cells: Set<string>, dots: Map<number, Dot>): string[] {
-  const sounded = new Set(
-    [...cells].map((k) => {
-      const [s, f] = k.split(':').map(Number);
-      return fretMidi(tuning, s, f) % 12;
-    }),
-  );
+  const sounded = new Set(cellMidis(tuning, cells).map((m) => m % 12));
   return [...dots.entries()].filter(([pc]) => !sounded.has(pc)).map(([, d]) => d.name);
 }
 
@@ -434,25 +447,24 @@ export function chordVoicings(tuning: Tuning, dots: Map<number, Dot>, rootPc: nu
 
 // ---- playback note selection (§6) ---------------------------------------------
 
-/** Every pitch of a given class reachable inside the position window, ascending. */
-function inWindow(tuning: Tuning, win: FretWindow, pc: number): number[] {
-  const out: number[] = [];
-  for (let s = 0; s < tuning.strings.length; s++) {
-    for (let f = win.startFret; f < win.startFret + win.width; f++) {
-      const midi = fretMidi(tuning, s, f);
-      if (midi % 12 === pc) out.push(midi);
-    }
+/**
+ * One voicing of the chord, taken from what the board is drawing: the lowest
+ * chord tone on each string, at most one per string, ascending.
+ *
+ * Reading the cells rather than the window is what makes playback follow the
+ * position — in voicing mode the cells *are* the shape, so the strum is the
+ * shape; in position or whole mode it is one note per string in the drawn
+ * region. A window was only ever right for one of the three.
+ */
+export function chordVoicing(tuning: Tuning, cells: Set<string>, root: string, type: string): number[] {
+  const pcs = new Set(chordNotes(root, type).map((n) => n.pc));
+  const lowest = new Map<number, number>();
+  for (const key of cells) {
+    const [s, f] = parseCell(key);
+    if (!pcs.has(fretMidi(tuning, s, f) % 12)) continue;
+    if (f < (lowest.get(s) ?? Infinity)) lowest.set(s, f);
   }
-  return out.sort((a, b) => a - b);
-}
-
-/** One voicing of the chord: the lowest playable occurrence of each chord tone
- *  in the window, so a strum sounds like a shape rather than every octave. */
-export function chordVoicing(tuning: Tuning, win: FretWindow, root: string, type: string): number[] {
-  return chordNotes(root, type)
-    .map((n) => inWindow(tuning, win, n.pc)[0])
-    .filter((m): m is number => m !== undefined)
-    .sort((a, b) => a - b);
+  return [...lowest].map(([s, f]) => fretMidi(tuning, s, f)).sort((a, b) => a - b);
 }
 
 /** The scale ascending from `startMidi`, closing on the root `octaves` up, so

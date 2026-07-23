@@ -12,7 +12,6 @@
     SCALES,
     chordSymbol,
     diatonicTriads,
-    fretMidi,
     notePc,
     type Tuning,
   } from './lib/theory';
@@ -26,14 +25,16 @@
   import {
     CHORD_COLORS,
     board,
+    cellMidis,
     chordVoicing,
     chordVoicings,
     contentRoot,
-    rootAnchors,
     effectiveLabelMode,
+    inSelection,
     noteMap,
     scaleRun,
     usableAnchors,
+    type NeckSelection,
   } from './lib/view';
 
   type Tab = Content['kind'];
@@ -67,8 +68,21 @@
   // the working one.
   let display = $state<Display>({ mode: 'position', octaves: 1, anchor: 0 });
 
+  // A dragged region of neck, session-only: a way of looking, like the layer
+  // toggles, so it is never saved and never travels with a favorite.
+  let selection = $state<NeckSelection | null>(null);
+
   let dots = $derived(noteMap(content, labelMode));
-  let neck = $derived(board(tuning, win, content, dots, display));
+  // A selection is its own way of looking: it draws from the whole neck and then
+  // clips to the box, so it isn't trapped inside whatever window Show was on —
+  // that window would otherwise leave only its handful of cells to select from.
+  let neck = $derived(
+    board(tuning, win, content, dots, selection ? { mode: 'whole', octaves: 1, anchor: 0 } : display),
+  );
+  // Everything downstream — what is drawn *and* what is played — reads the
+  // clipped set, so the selection can never show one thing and sound another.
+  let cells = $derived(new Set([...neck.cells].filter((k) => inSelection(selection, k))));
+  let ghosts = $derived(new Map([...neck.ghosts].filter(([k]) => inSelection(selection, k))));
 
   // A single chord steps through shapes; everything else steps through roots.
   let oneChord = $derived(content.kind === 'chord' && content.slots.length === 1);
@@ -109,16 +123,19 @@
     }
   }
 
+  /** Any Show choice is a statement you want that view back, not the custom box. */
+  const setMode = (m: Display['mode']) => (selection = null, display.mode = m);
+
   /** Picking a fret width is also a statement that you want the window back. */
   function setWidth(w: number) {
     win.width = w;
     win.startFret = clamp(win.startFret);
-    display.mode = 'position';
+    setMode('position');
   }
 
   function setOctaves(n: number) {
     display.octaves = n;
-    display.mode = 'octaves';
+    setMode('octaves');
     display.anchor = Math.min(display.anchor, usableAnchors(tuning, content, dots, n).length - 1);
   }
 
@@ -150,24 +167,25 @@
     content = { ...content, degree: content.degree === degree ? null : degree };
   }
 
+  /** Where a scale run begins: the chosen root in octave mode, else the lowest
+   *  root actually on screen — which is what makes playback track the position
+   *  rather than jumping only when the window crosses an octave. */
+  let startMidi = $derived(
+    display.mode === 'octaves'
+      ? anchorMidi
+      : cellMidis(tuning, cells).find((m) => m % 12 === notePc(root)) ??
+        cellMidis(tuning, cells)[0] ??
+        60,
+  );
+
   function play() {
     // In octave mode play exactly what is drawn: the span from the anchor root.
     const octaves = display.mode === 'octaves' ? display.octaves : 1;
     if (content.kind === 'scale') {
-      playSequence(scaleRun(content.root, content.scale, startMidi(), octaves));
+      playSequence(scaleRun(content.root, content.scale, startMidi, octaves));
     } else if (content.kind === 'arpeggio') {
-      playSequence(chordVoicing(tuning, win, content.root, content.chord));
+      playSequence(chordVoicing(tuning, cells, content.root, content.chord));
     }
-  }
-
-  /** Where a scale run begins: the chosen root in octave mode, else the lowest
-   *  root reachable in the window. */
-  function startMidi(): number {
-    if (display.mode === 'octaves') return anchorMidi;
-    const inWin = rootAnchors(tuning, content).map((a) => a.midi).find(
-      (m) => m >= fretMidi(tuning, 0, win.startFret) && m <= fretMidi(tuning, tuning.strings.length - 1, win.startFret + win.width - 1),
-    );
-    return inWin ?? rootAnchors(tuning, content)[0]?.midi ?? 60;
   }
 
   const snapshot = () => {
@@ -279,7 +297,7 @@
           </select>
           <button
             class="x" aria-label="Play {chordSymbol(slot.root, slot.type)}"
-            onclick={() => strum(chordVoicing(tuning, win, slot.root, slot.type))}>▶</button
+            onclick={() => strum(chordVoicing(tuning, cells, slot.root, slot.type))}>▶</button
           >
           {#if slots.length > 1}
             <button
@@ -299,25 +317,32 @@
     <h3>Show</h3>
     <!-- A chord is a shape to hold, so it offers shapes; a scale or arpeggio is
          a pattern to run, so it offers a position or a span of octaves. -->
+    <!-- A live selection is its own mode, so it wins the pressed state until you
+         either clear it or pick another view (which clears it). -->
     <div class="seg" role="group" aria-label="How much of the neck to show">
       {#if oneChord}
-        <button aria-pressed={display.mode !== 'whole'} onclick={() => (display.mode = 'position')}>
+        <button aria-pressed={!selection && display.mode !== 'whole'} onclick={() => setMode('position')}>
           Voicings
         </button>
       {:else}
-        <button aria-pressed={display.mode === 'position'} onclick={() => (display.mode = 'position')}>
+        <button aria-pressed={!selection && display.mode === 'position'} onclick={() => setMode('position')}>
           Position
         </button>
-        <button aria-pressed={display.mode === 'octaves'} onclick={() => (display.mode = 'octaves')}>
+        <button aria-pressed={!selection && display.mode === 'octaves'} onclick={() => setMode('octaves')}>
           Octaves
         </button>
       {/if}
-      <button aria-pressed={display.mode === 'whole'} onclick={() => (display.mode = 'whole')}>
+      <button aria-pressed={!selection && display.mode === 'whole'} onclick={() => setMode('whole')}>
         Whole neck
       </button>
     </div>
+    {#if selection}
+      <div class="seg" role="group" aria-label="Custom selection">
+        <button aria-pressed={true} onclick={() => (selection = null)}>Custom selection — clear</button>
+      </div>
+    {/if}
 
-    {#if display.mode !== 'whole' && !oneChord}
+    {#if !selection && display.mode !== 'whole' && !oneChord}
       {#if display.mode === 'position'}
         <div class="seg" role="group" aria-label="Window width">
           {#each [4, 5, 6] as w}
@@ -333,7 +358,7 @@
       {/if}
     {/if}
 
-    {#if display.mode !== 'whole'}
+    {#if !selection && display.mode !== 'whole'}
       <div class="row">
         <button class="x" aria-label="Previous" onclick={() => nudge(-1)}>◄</button>
         <span class="readout">
@@ -373,17 +398,18 @@
   <section>
     <h2>{describeContent(content)}</h2>
     <Fretboard
-      {tuning} {dots} {win}
-      cells={neck.cells}
+      {tuning} {dots} {win} {cells} {ghosts}
+      bind:selection
       barre={neck.barre}
-      ghosts={neck.ghosts}
-      showWindow={display.mode === 'position'}
+      showWindow={!selection && display.mode === 'position'}
       onCenter={center}
       onPlayNote={playNote}
       onPickRoot={(anchor) => (display.anchor = anchor)}
     />
     <p class="hint">
-      {#if display.mode === 'whole'}
+      {#if selection}
+        Only the notes inside your selection. Drag again to move it, or clear it to go back.
+      {:else if display.mode === 'whole'}
         Every occurrence across the neck, all read equally. Click a fret to centre a position.
       {:else if display.mode === 'octaves'}
         {display.octaves} octave{display.octaves > 1 ? 's' : ''} up from {rootLabel}. Dashed roots
@@ -413,6 +439,7 @@
         <li><i style="background:var(--c-ext)"></i>other chord tone</li>
         {#if content.kind === 'scale'}<li><i style="background:var(--c-scale)"></i>scale tone</li>{/if}
       {/if}
+      <li><i class="open"></i>open string</li>
     </ul>
   </section>
   {/if}
@@ -461,4 +488,5 @@
   .legend li { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { width: 13px; height: 13px; border-radius: 50%; flex: none; }
   .legend i.split { background: linear-gradient(90deg, var(--c-ch1) 50%, var(--c-ch2) 50%); }
+  .legend i.open { background: var(--panel); border: 2.5px solid var(--muted); }
 </style>

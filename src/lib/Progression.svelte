@@ -35,7 +35,7 @@
     type Preset,
     type Tonality,
   } from './progression';
-  import { board, chordTypes } from './view';
+  import { board, chordTypes, inSelection, type NeckSelection } from './view';
 
   let {
     content = $bindable(),
@@ -98,6 +98,10 @@
   let neck = $derived(
     board(tuning, WIN, content, dots, { mode: 'whole', octaves: 1, anchor: 0 }),
   );
+  // Session-only, like the layers: a dragged region of neck is a way of looking.
+  // This tab draws the whole neck, so it is where isolating a box helps most.
+  let selection = $state<NeckSelection | null>(null);
+  let cells = $derived(new Set([...neck.cells].filter((k) => inSelection(selection, k))));
 
   /** Stepping wraps — the progression is a loop (§4.3). */
   function nudge(d: number) {
@@ -235,7 +239,9 @@
             <span>{chordSymbolOf(prog.key, ch)}</span>
             {#if advice?.labels[i]}<em>{advice.labels[i]}</em>{/if}
           </button>
-          <button class="x play" onclick={() => playChord(ch)} aria-label="Play {chordSymbolOf(prog.key, ch)} in the Chord tab">▶</button>
+          <!-- A bridge, not a speaker: this tab has no audio (§4.4), so the glyph
+               says "goes somewhere" rather than borrowing ▶ from playback. -->
+          <button class="x play" onclick={() => playChord(ch)} aria-label="Open {chordSymbolOf(prog.key, ch)} in the Chord tab">↗</button>
         </div>
         {#if editing}
           <div class="edit">
@@ -321,7 +327,8 @@
     {tuning}
     {dots}
     {lines}
-    cells={neck.cells}
+    {cells}
+    bind:selection
     barre={null}
     ghosts={neck.ghosts}
     showWindow={false}

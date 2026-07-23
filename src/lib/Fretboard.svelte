@@ -6,7 +6,7 @@
    * Dumb by design: it draws whatever pitch classes `dots` hands it.
    */
   import { LAST_FRET, fretMidi, type FretWindow, type Tuning } from './theory';
-  import { cellKey, type Barre, type Dot } from './view';
+  import { cellKey, type Barre, type Dot, type NeckSelection } from './view';
 
   let {
     tuning,
@@ -17,6 +17,7 @@
     showWindow,
     win,
     lines = [],
+    selection = $bindable(null),
     onCenter,
     onPlayNote,
     onPickRoot,
@@ -34,6 +35,9 @@
     win: FretWindow;
     /** Guide-tone lines as cell-key pairs, drawn as arrowed `--accent` strokes (§6). */
     lines?: { from: string; to: string }[];
+    /** Dragged-out region of neck. The parent owns it — it filters `cells` — but
+     *  the gesture and the Clear control live here, where the neck is. */
+    selection?: NeckSelection | null;
     onCenter: (fret: number) => void;
     onPlayNote: (midi: number) => void;
     /** Re-anchor the octave view on one of the faint roots. */
@@ -67,10 +71,86 @@
   const inWindow = (f: number) => f >= win.startFret && f < win.startFret + win.width;
   const barred = (s: number, f: number) =>
     !!barre && barre.fret === f && s >= barre.from && s <= barre.to;
+
+  // ---- drag to isolate a region of neck -----------------------------------------
+
+  let svg: SVGSVGElement;
+  let drag = $state<{ s0: number; f0: number; s1: number; f1: number } | null>(null);
+  // Not $state: only read back inside the click that follows the drag.
+  let dragged = false;
+
+  const clamp = (v: number, hi: number) => Math.max(0, Math.min(hi, v));
+
+  /** Which cell a pointer is over. The viewBox scales with the column, so client
+   *  pixels are converted through the rendered size rather than assumed 1:1. */
+  function cellAt(e: PointerEvent) {
+    const r = svg.getBoundingClientRect();
+    const ux = ((e.clientX - r.left) * width) / r.width;
+    const uy = ((e.clientY - r.top) * height) / r.height;
+    return {
+      s: clamp(count - 1 - Math.round((uy - PAD_T - STRING_H / 2) / STRING_H), count - 1),
+      f: clamp(Math.round((ux - PAD_L) / FRET_W), LAST_FRET),
+    };
+  }
+
+  let marquee = $derived.by(() => {
+    if (drag) {
+      return {
+        fromString: Math.min(drag.s0, drag.s1), toString: Math.max(drag.s0, drag.s1),
+        fromFret: Math.min(drag.f0, drag.f1), toFret: Math.max(drag.f0, drag.f1),
+      };
+    }
+    return selection;
+  });
+
+  function down(e: PointerEvent) {
+    // ponytail: mouse and pen only — claiming touch here would take the neck's
+    // horizontal scroll away. Add a `touch-action` dance if tablets ask for it.
+    if (e.pointerType === 'touch') return;
+    const { s, f } = cellAt(e);
+    drag = { s0: s, f0: f, s1: s, f1: f };
+    dragged = false;
+    svg.setPointerCapture(e.pointerId);
+  }
+
+  function moved(e: PointerEvent) {
+    if (!drag) return;
+    const { s, f } = cellAt(e);
+    if (s !== drag.s0 || f !== drag.f0) dragged = true;
+    drag = { ...drag, s1: s, f1: f };
+  }
+
+  /** A drag that never left its starting cell is a click, and is left alone. */
+  function up() {
+    if (dragged && marquee) selection = marquee;
+    drag = null;
+  }
 </script>
 
+<!-- Escape is the gesture people already try; the button is the one a keyboard
+     user can reach. Making a selection is mouse-only — the neck is fully usable
+     without one, so nothing is lost, only unavailable. -->
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (selection = null)} />
+
+<div class="selbar">
+  {#if selection}
+    <span>
+      Showing strings {selection.fromString + 1}–{selection.toString + 1}, frets
+      {selection.fromFret}–{selection.toFret}.
+    </span>
+    <button onclick={() => (selection = null)}>Clear selection</button>
+  {:else}
+    <span>Drag across the neck to show only that part of it.</span>
+  {/if}
+</div>
+
 <div class="scroll">
-  <svg viewBox="0 0 {width} {height}" role="group" aria-label="Fretboard">
+  <svg
+    bind:this={svg}
+    viewBox="0 0 {width} {height}" role="group" aria-label="Fretboard"
+    onpointerdown={down} onpointermove={moved} onpointerup={up} onpointercancel={up}
+    onclickcapture={(e) => { if (dragged) { e.stopPropagation(); dragged = false; } }}
+  >
     <defs>
       <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="var(--wood-2)" />
@@ -154,13 +234,16 @@
                in --accent; both share the outlined, panel-filled, ink-labelled look. -->
           {@const outline = played && !!dot.outline}
           {@const dashed = ghost || outline}
+          <!-- Open strings read as the ring every chart draws them as, so a note
+               sounded by the nut is never mistaken for one you have to fret. -->
+          {@const open = played && f === 0 && !outline}
           {@const r = dashed ? 11 : dot.faded ? 10 : 13}
           <g
             role="button" tabindex="0"
             class="dot" class:faded={dot.faded && played && !outline} class:ghost class:outline
             aria-label={ghost
               ? `Start the shape from ${dot.name}, string ${s + 1} fret ${f}`
-              : `${dot.name}, ${dot.role}, string ${s + 1} fret ${f}${outline ? ', next chord' : ''}${dot.cutRing ? ', held into the next chord' : ''}${barred(s, f) ? ', barred' : ''}`}
+              : `${dot.name}, ${dot.role}, ${open ? `open string ${s + 1}` : `string ${s + 1} fret ${f}`}${outline ? ', next chord' : ''}${dot.cutRing ? ', held into the next chord' : ''}${barred(s, f) ? ', barred' : ''}`}
             onclick={() => (ghost ? onPickRoot(ghosts.get(key)!) : onPlayNote(midi))}
             onkeydown={(e) =>
               (e.key === 'Enter' || e.key === ' ') &&
@@ -172,13 +255,21 @@
                 stroke={outline ? 'var(--accent)' : dot.colors[0]} stroke-width="2" stroke-dasharray="3 2.5"
               />
             {:else}
-              <circle cx={x(f)} cy={y(s)} r={r} fill={dot.colors[0]} />
-              {#if dot.colors.length > 1}
+              <circle
+                cx={x(f)} cy={y(s)} r={r}
+                fill={open ? 'var(--panel)' : dot.colors[0]}
+                stroke={open ? dot.colors[0] : 'none'} stroke-width="3.5"
+              />
+              <!-- An open note in overlay keeps its numeric badge, which carries
+                   chord identity on its own, rather than filling the ring in. -->
+              {#if dot.colors.length > 1 && !open}
                 {#each dot.colors as color, i}
                   <path d={wedge(x(f), y(s), r, i, dot.colors.length)} fill={color} />
                 {/each}
               {/if}
-              <circle cx={x(f)} cy={y(s)} r={r + 2.5} fill="none" stroke={dot.colors[0]} stroke-width="1.6" opacity=".5" />
+              {#if !open}
+                <circle cx={x(f)} cy={y(s)} r={r + 2.5} fill="none" stroke={dot.colors[0]} stroke-width="1.6" opacity=".5" />
+              {/if}
               <!-- §3's exception note: a chord tone outside the parent scale, ringed in --warn. -->
               {#if dot.warnRing}
                 <circle cx={x(f)} cy={y(s)} r={r + 3.5} fill="none" stroke="var(--warn)" stroke-width="2" />
@@ -189,7 +280,7 @@
               {/if}
             {/if}
             <!-- Every dot always carries its text label, so nothing is encoded by colour alone (§1). -->
-            <text x={x(f)} y={y(s) + 3.5} text-anchor="middle" class="lbl" class:ink={dashed}>{dot.label}</text>
+            <text x={x(f)} y={y(s) + 3.5} text-anchor="middle" class="lbl" class:ink={dashed || open}>{dot.label}</text>
             {#if dot.badge && !dashed}
               <circle cx={x(f) + r} cy={y(s) - r} r="7" fill="var(--panel)" stroke={dot.colors[0]} stroke-width="1.2" />
               <text x={x(f) + r} y={y(s) - r + 3} text-anchor="middle" class="badge">{dot.badge}</text>
@@ -198,6 +289,17 @@
         {/if}
       {/each}
     {/each}
+
+    <!-- Outline only, drawn over everything: the region it frames is the only one
+         with notes in it, so there is nothing outside to dim. -->
+    {#if marquee}
+      <rect
+        x={x(marquee.fromFret) - FRET_W / 2} y={y(marquee.toString) - STRING_H / 2}
+        width={(marquee.toFret - marquee.fromFret + 1) * FRET_W}
+        height={(marquee.toString - marquee.fromString + 1) * STRING_H}
+        class="marquee" rx="4"
+      />
+    {/if}
 
     <!-- Guide-tone lines: the only stroke on this tab (§6). Drawn last, over the dots. -->
     {#each lines as ln}
@@ -213,6 +315,12 @@
 
 <style>
   .scroll { overflow-x: auto; padding-bottom: 6px; }
+  .selbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    color: var(--muted); font-size: 0.78rem; margin-bottom: 6px;
+  }
+  .selbar button { font-size: 0.72rem; padding: 3px 9px; }
+  .marquee { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; }
   /* Grows to fill the column; below min-width the neck scrolls rather than
      shrinking the dots into illegibility. */
   svg { display: block; width: 100%; min-width: 1040px; font-family: var(--font-mono); }

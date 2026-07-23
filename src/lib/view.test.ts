@@ -2,9 +2,11 @@ import { describe, expect, test } from 'vitest';
 import {
   CHORD_COLORS,
   board,
+  cellMidis,
   chordVoicing,
   chordVoicings,
   effectiveLabelMode,
+  inSelection,
   noteMap,
   rootAnchors,
   usableAnchors,
@@ -387,11 +389,35 @@ describe('chord voicings are playable', () => {
 });
 
 describe('playback note selection (§6)', () => {
-  test('a voicing is one note per chord tone, ascending, inside the window', () => {
-    const v = chordVoicing(standard, win, 'C', 'major');
-    expect(v).toHaveLength(3);
+  /** The cells a position window draws for a chord, which is what playback reads. */
+  const windowCells = (root: string, type: string, startFret: number, t = standard) => {
+    const c: Content = { kind: 'arpeggio', root, chord: type };
+    const pos: Display = { mode: 'position', octaves: 1, anchor: 0 };
+    return board(t, { startFret, width: 5 }, c, noteMap(c, 'names'), pos).cells;
+  };
+
+  test('a voicing is at most one note per string, ascending, all chord tones', () => {
+    const v = chordVoicing(standard, windowCells('C', 'major', 5), 'C', 'major');
+    expect(v.length).toBeGreaterThan(2);
+    expect(v.length).toBeLessThanOrEqual(standard.strings.length);
     expect(v).toEqual([...v].sort((a, b) => a - b));
     expect(new Set(v.map((m) => m % 12))).toEqual(new Set([0, 4, 7]));
+  });
+
+  test('the same chord sounds where it is drawn, not where the window used to be', () => {
+    const low = chordVoicing(standard, windowCells('C', 'major', 0), 'C', 'major');
+    const mid = chordVoicing(standard, windowCells('C', 'major', 5), 'C', 'major');
+    const high = chordVoicing(standard, windowCells('C', 'major', 9), 'C', 'major');
+    expect(low[0]).toBeLessThan(mid[0]);
+    expect(mid[0]).toBeLessThan(high[0]);
+
+    // And the same for a stepped voicing, where no window moves at all — the bug
+    // that pinned playback to frets 5–9 however far up the neck the shape went.
+    const dots = noteMap({ kind: 'chord', slots: [{ root: 'C', type: 'major' }] }, 'names');
+    const shapes = chordVoicings(standard, dots, notePc('C'));
+    const lows = shapes.map((s) => chordVoicing(standard, s.cells, 'C', 'major')[0]);
+    expect(new Set(lows).size).toBeGreaterThan(1);
+    expect(lows.at(-1)!).toBeGreaterThan(lows[0]);
   });
 
   test('a scale run ascends one octave and closes on the root', () => {
@@ -410,6 +436,16 @@ describe('playback note selection (§6)', () => {
 
   test('playback follows the tuning, not standard', () => {
     const dropD = PRESET_TUNINGS[1];
-    expect(chordVoicing(dropD, { startFret: 0, width: 5 }, 'D', 'major')[0]).toBe(38); // open low D
+    expect(chordVoicing(dropD, windowCells('D', 'major', 0, dropD), 'D', 'major')[0]).toBe(38); // open low D
+  });
+
+  test('a selection clips what plays, so nothing sounds off the visible board', () => {
+    const cells = windowCells('C', 'major', 0);
+    const sel = { fromString: 3, toString: 5, fromFret: 0, toFret: 4 };
+    const clipped = new Set([...cells].filter((k) => inSelection(sel, k)));
+    const v = chordVoicing(standard, clipped, 'C', 'major');
+    expect(v.length).toBeGreaterThan(0);
+    expect(v.every((m) => m >= fretMidi(standard, 3, 0))).toBe(true);
+    expect(cellMidis(standard, clipped).length).toBeLessThan(cellMidis(standard, cells).length);
   });
 });
