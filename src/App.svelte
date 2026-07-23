@@ -3,7 +3,7 @@
   import Fretboard from './lib/Fretboard.svelte';
   import Progression from './lib/Progression.svelte';
   import TuningPicker from './lib/TuningPicker.svelte';
-  import { playNote, playSequence, strum } from './lib/audio';
+  import { audioStatus, playNote, playSequence, strum } from './lib/audio.svelte';
   import {
     CHORDS,
     LAST_FRET,
@@ -232,6 +232,7 @@
 <header>
   <h1>Guitar Map</h1>
   <p>Scale, chord and arpeggio shapes in any tuning — computed, never authored.</p>
+  {#if audioStatus.loading}<p class="loading-note">Loading guitar sounds… play again in a second.</p>{/if}
 </header>
 
 <div class="tabs" role="tablist" aria-label="View">
@@ -445,6 +446,11 @@
   {/if}
 </main>
 
+<footer>
+  <span>© {new Date().getFullYear()} DevAurora</span>
+  <a class="button" href="mailto:hello@devaurora.io">Contact us!</a>
+</footer>
+
 <style>
   header { padding: 20px 24px 4px; }
   header h1 { font-size: 1.2rem; margin: 0; letter-spacing: -0.01em; }
@@ -489,4 +495,10 @@
   .legend i { width: 13px; height: 13px; border-radius: 50%; flex: none; }
   .legend i.split { background: linear-gradient(90deg, var(--c-ch1) 50%, var(--c-ch2) 50%); }
   .legend i.open { background: var(--panel); border: 2.5px solid var(--muted); }
+
+  footer {
+    display: flex; justify-content: center; align-items: center; gap: 16px;
+    padding: 16px 24px; border-top: 1px solid var(--hair); color: var(--muted); font-size: 0.8rem;
+  }
+  footer .button { font-weight: 700; }
 </style>

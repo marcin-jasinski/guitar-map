@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { scheduleNote, scheduleSequence, scheduleStrum, type Sampler } from './audio';
+import { scheduleNote, scheduleSequence, scheduleStrum, type Sampler } from './audio.svelte';
 import { freq } from './theory';
 
 /**

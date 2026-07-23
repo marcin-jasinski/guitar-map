@@ -52,18 +52,23 @@ export const scheduleSequence = (s: Sampler, now: number, midis: number[], gap: 
 
 let sampler: Sampler | undefined;
 let now: (() => number) | undefined;
-let loading: Promise<void> | undefined;
+let loadingPromise: Promise<void> | undefined;
+
+/** Reactive flag so the UI can say *why* the first click made no sound. */
+export const audioStatus = $state({ loading: false });
 
 /** Lazy, once. Runs inside the first user gesture, so `Tone.start()` is allowed. */
 function ensureLoaded(): void {
-  if (loading) return;
-  loading = (async () => {
+  if (loadingPromise) return;
+  audioStatus.loading = true;
+  loadingPromise = (async () => {
     const Tone = await import('tone');
     await Tone.start(); // the audio context may only start on a user gesture
     const s = new Tone.Sampler({ urls: SAMPLES, baseUrl: BASE_URL }).toDestination();
     await Tone.loaded();
     now = () => Tone.now();
     sampler = s;
+    audioStatus.loading = false;
   })();
 }
 
