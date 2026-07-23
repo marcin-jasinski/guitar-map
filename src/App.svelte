@@ -457,15 +457,18 @@
   header p { color: var(--muted); font-size: 0.84rem; margin: 2px 0 0; }
 
   /* The neck grows into the space up to 1920; past that the whole page centres
-     rather than stretching. */
-  header, .tabs, main { max-width: 1920px; margin: 0 auto; }
+     rather than stretching. width:100% is needed alongside auto margins here:
+     #app is a flex column (footer, §sticky-footer), and a flex item with auto
+     cross-axis margins shrinks to content instead of stretching unless it has
+     an explicit width. */
+  header, .tabs, main { width: 100%; max-width: 1920px; margin: 0 auto; }
 
   .tabs { display: flex; gap: 4px; padding: 8px 24px 0; }
   .tabs button { text-transform: capitalize; padding: 7px 16px; }
   .tabs button[aria-selected='true'] {
     background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700;
   }
-  main { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 20px; padding: 16px 24px 60px; align-items: start; }
+  main { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 20px; padding: 16px 24px 60px; align-items: start; flex: 1; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
   aside { background: var(--panel); border: 1px solid var(--hair); border-radius: 12px; padding: 14px; }
@@ -500,5 +503,6 @@
     display: flex; justify-content: center; align-items: center; gap: 16px;
     padding: 16px 24px; border-top: 1px solid var(--hair); color: var(--muted); font-size: 0.8rem;
   }
-  footer .button { font-weight: 700; }
+  footer .button { color: var(--muted); text-decoration: none; }
+  footer .button:hover { text-decoration: underline; }
 </style>

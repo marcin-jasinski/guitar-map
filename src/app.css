@@ -58,6 +58,12 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 h3 {
   font-size: 0.72rem;
   text-transform: uppercase;
